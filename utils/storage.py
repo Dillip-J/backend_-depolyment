@@ -11,9 +11,9 @@ from fastapi import UploadFile
 # ==========================================
 # In production, these should be loaded from a .env file using os.getenv()
 cloudinary.config( 
-    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME", "CLOUDINARY_URL=cloudinary://<your_api_key>:<your_api_secret>@dojfaj16l"), 
-    api_key = os.getenv("CLOUDINARY_API_KEY", "896149337893281"), 
-    api_secret = os.getenv("CLOUDINARY_API_SECRET", "DqVsQPP1PbBUrSjr_-zgI2rTSyQ"),
+    cloud_name = os.getenv("CLOUDINARY_CLOUD_NAME"), 
+    api_key = os.getenv("CLOUDINARY_API_KEY"), 
+    api_secret = os.getenv("CLOUDINARY_API_SECRET"),
     secure = True
 )
 
@@ -22,15 +22,15 @@ class StorageEngine:
         # Change this to "s3", "cloudinary", or "local" via Env Vars
         self.provider = os.getenv("STORAGE_PROVIDER", "cloudinary") 
 
-    def upload_file(self, file: UploadFile, folder: str) -> str:
+    def upload_file(self, file_bytes: bytes, file_extension: str, folder_name: str) -> str:
         """Universal uploader for any provider"""
         
         # --- CASE 1: CLOUDINARY ---
         if self.provider == "cloudinary":
             try:
                 result = cloudinary.uploader.upload(
-                    file.file, 
-                    folder=f"eterna/{folder}", 
+                    file_bytes, 
+                    folder=f"eterna/{folder_name}", 
                     resource_type="auto"
                 )
                 return result.get("secure_url")
@@ -40,16 +40,17 @@ class StorageEngine:
 
         # --- CASE 2: AWS S3 (Placeholder) ---
         if self.provider == "s3":
-            return f"https://my-bucket.s3.amazonaws.com/{folder}/{file.filename}"
+            # Just a placeholder if no S3 is actually implemented
+            unique_name = f"{uuid.uuid4().hex}.{file_extension}"
+            return f"https://my-bucket.s3.amazonaws.com/{folder_name}/{unique_name}"
 
         # --- CASE 3: LOCAL FALLBACK ---
-        extension = file.filename.split('.')[-1]
-        unique_name = f"{uuid.uuid4().hex}.{extension}"
-        path = f"uploads/{folder}/{unique_name}"
+        unique_name = f"{uuid.uuid4().hex}.{file_extension}"
+        path = f"uploads/{folder_name}/{unique_name}"
         os.makedirs(os.path.dirname(path), exist_ok=True)
         
         with open(path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(file_bytes)
         return f"/{path}"
 
     def delete_file(self, file_url: str) -> bool:
