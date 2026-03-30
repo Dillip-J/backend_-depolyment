@@ -9,9 +9,9 @@ from fastapi import Response
 from routers import auth, booking, home, records, support, services, admin, admin_auth, providers, upload, users, websockets, reviews, complaints 
 # Initialize Database Tables
 models.Base.metadata.create_all(bind=engine)
-
+ 
 app = FastAPI(title="V Healthcare API")
-
+ 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(content="", media_type="image/x-icon", status_code=204)
