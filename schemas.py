@@ -221,6 +221,15 @@ class ComplaintOut(ComplaintCreate, ORMBase):
     provider_id: UUID
     status: str
     created_at: Optional[datetime] = None
+
+class UserOut(BaseModel):
+    user_id: str
+    name: str
+    email: str
+
+    class Config:
+        from_attributes = True  # For Pydantic v2
+        orm_mode = True         # For Pydantic v1
     
 # from pydantic import BaseModel, EmailStr, ConfigDict
 # from typing import Optional, List
