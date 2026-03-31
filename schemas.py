@@ -227,9 +227,7 @@ class UserOut(BaseModel):
     name: str
     email: str
 
-    class Config:
-        from_attributes = True  # For Pydantic v2
-        orm_mode = True         # For Pydantic v1
+    model_config = ConfigDict(from_attributes=True)
     
 # from pydantic import BaseModel, EmailStr, ConfigDict
 # from typing import Optional, List
