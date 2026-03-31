@@ -17,9 +17,12 @@ async def favicon():
     return Response(content="", media_type="image/x-icon", status_code=204)
 
 # Create uploads directory if it doesn't exist
-os.makedirs("uploads", exist_ok=True)
-# This tells FastAPI: "If a URL starts with /uploads, look in the uploads folder"
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+try:
+    os.makedirs("uploads", exist_ok=True)
+    # This tells FastAPI: "If a URL starts with /uploads, look in the uploads folder"
+    app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+except OSError:
+    print("Warning: Running on a read-only filesystem (e.g., Vercel). Local uploads directory could not be created.")
 
 app.add_middleware(
     CORSMiddleware,

@@ -1,13 +1,14 @@
 # routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas
 
 # IMPORT FROM OUR CENTRAL SECURITY ENGINE
-from utils.security import verify_password, create_access_token
+from utils.security import verify_password, get_password_hash, create_access_token
+import uuid
 
 # 🚨 IMPORTANT: These MUST match exactly what is inside your utils/security.py file!
 SECRET_KEY = "your_super_secret_key" 
@@ -15,14 +16,49 @@ ALGORITHM = "HS256"
 
 router = APIRouter(prefix="/auth", tags=["Patient Authentication"])
 
-# --- 1. PATIENT ONLY LOGIN ROUTE ---
+# --- 1. PATIENT SIGNUP (REGISTRATION) ROUTE ---
+# Your frontend is trying to hit /users/register, so we will map it here.
+# Note: If you want to keep prefixes clean, you might want to change your 
+# frontend fetch to hit /auth/register, but we will make this match your current JS.
+@router.post("/register", response_model=schemas.UserOut)
+def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    # 1. Check if email already exists
+    existing_user = db.query(models.User).filter(models.User.email == user.email).first()
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    # 2. Hash the password
+    hashed_password = get_password_hash(user.password)
+
+    # 3. Create the new user object
+    # Assuming your User model uses 'user_id' as the primary key UUID
+    new_user = models.User(
+        user_id=str(uuid.uuid4()), 
+        name=user.name,
+        email=user.email,
+        phone=user.phone,
+        password=hashed_password
+    )
+
+    # 4. Save to database
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return new_user
+
+
+# --- 2. PATIENT LOGIN ROUTE ---
+# CRITICAL FIX: Changed from schemas.UserLogin to OAuth2PasswordRequestForm
 @router.post("/login")
-def login(creds: schemas.UserLogin, db: Session = Depends(get_db)):
-    # 1. ONLY look in the Users table
-    user = db.query(models.User).filter(models.User.email == creds.email).first()
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # 1. Look up the user. 
+    # Notice we use form_data.username here because FastAPI demands that specific variable name, 
+    # even though we are actually passing the user's email address from the frontend.
+    user = db.query(models.User).filter(models.User.email == form_data.username).first()
     
     # 2. Verify Password Hash
-    if not user or not verify_password(creds.password, user.password):
+    if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # 3. Create the Patient Token
@@ -39,7 +75,7 @@ def login(creds: schemas.UserLogin, db: Session = Depends(get_db)):
         }
     }
 
-# --- 2. THE BOUNCER (Token Decoder) ---
+# --- 3. THE BOUNCER (Token Decoder) ---
 # This tells FastAPI where to look for the token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
