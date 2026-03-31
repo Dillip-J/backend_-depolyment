@@ -26,3 +26,7 @@ def create_access_token(data: dict):
     # This creates the mathematically signed gibberish string
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
+
+# Add this function to securely hash passwords for new users
+def get_password_hash(password: str):
+    return pwd_context.hash(password)
