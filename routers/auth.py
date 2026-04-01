@@ -17,23 +17,22 @@ ALGORITHM = "HS256"
 router = APIRouter(prefix="/auth", tags=["Patient Authentication"])
 
 # --- 1. PATIENT SIGNUP (REGISTRATION) ROUTE ---
-# Your frontend is trying to hit /users/register, so we will map it here.
-# Note: If you want to keep prefixes clean, you might want to change your 
-# frontend fetch to hit /auth/register, but we will make this match your current JS.
 @router.post("/register", response_model=schemas.UserOut)
 def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
     # 1. Check if email already exists
     existing_user = db.query(models.User).filter(models.User.email == user.email).first()
     if existing_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="This email is already registered. Please log in instead."
+        )
 
     # 2. Hash the password
     hashed_password = get_password_hash(user.password)
 
     # 3. Create the new user object
-    # Assuming your User model uses 'user_id' as the primary key UUID
+    # 🚨 FIX APPLIED: Let the database auto-generate the user_id securely!
     new_user = models.User(
-        user_id=str(uuid.uuid4()), 
         name=user.name,
         email=user.email,
         phone=user.phone,
@@ -49,12 +48,9 @@ def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 # --- 2. PATIENT LOGIN ROUTE ---
-# CRITICAL FIX: Changed from schemas.UserLogin to OAuth2PasswordRequestForm
 @router.post("/login")
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # 1. Look up the user. 
-    # Notice we use form_data.username here because FastAPI demands that specific variable name, 
-    # even though we are actually passing the user's email address from the frontend.
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     
     # 2. Verify Password Hash
@@ -75,8 +71,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         }
     }
 
+
 # --- 3. THE BOUNCER (Token Decoder) ---
-# This tells FastAPI where to look for the token
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -95,34 +91,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except JWTError:
         raise credentials_exception       
+    
     # 3. Fetch the User from the Database
     user = db.query(models.User).filter(models.User.user_id == user_id_str).first()
     if user is None:
         raise credentials_exception      
+    
     # 4. Pass the full User object to the route!
     return user
-# from fastapi import APIRouter, Depends, HTTPException, status
-# from sqlalchemy.orm import Session
-# from database import get_db
-# from models.user import User  # Points directly to the file above
-# from schemas import UserCreate, UserLogin
-
-# router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-# @router.post("/register")
-# def register(user_data: UserCreate, db: Session = Depends(get_db)):
-#     # Check if user exists
-#     if db.query(User).filter(User.email == user_data.email).first():
-#         raise HTTPException(status_code=400, detail="Email already registered")
-    
-#     new_user = User(**user_data.dict())
-#     db.add(new_user)
-#     db.commit()
-#     return {"message": "Registered successfully"}
-
-# @router.post("/login")
-# def login(creds: UserLogin, db: Session = Depends(get_db)):
-#     user = db.query(User).filter(User.email == creds.email, User.password == creds.password).first()
-#     if not user:
-#         raise HTTPException(status_code=401, detail="Invalid credentials")
-#     return {"message": "Login successful", "user_id": user.user_id}
