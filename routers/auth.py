@@ -11,8 +11,7 @@ from utils.security import verify_password, get_password_hash, create_access_tok
 import uuid
 
 # 🚨 IMPORTANT: These MUST match exactly what is inside your utils/security.py file!
-SECRET_KEY = "your_super_secret_key" 
-ALGORITHM = "HS256"
+from utils.security import SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/auth", tags=["Patient Authentication"])
 

@@ -10,8 +10,7 @@ import models, schemas
 from utils.security import verify_password, create_access_token, hash_password
 
 # 🚨 MUST MATCH YOUR PATIENT AUTH SECRET
-SECRET_KEY = "your_super_secret_key" 
-ALGORITHM = "HS256"
+from utils.security import SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/admin-auth", tags=["Admin Authentication"])
 
