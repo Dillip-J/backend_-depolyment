@@ -1,16 +1,11 @@
 # routers/admin_auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas
 
 # IMPORT SECURITY TOOLS
 from utils.security import verify_password, create_access_token, hash_password
-
-# 🚨 MUST MATCH YOUR PATIENT AUTH SECRET
-from utils.security import SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/admin-auth", tags=["Admin Authentication"])
 
@@ -38,32 +33,7 @@ def admin_login(creds: schemas.UserLogin, db: Session = Depends(get_db)):
         }
     }
 
-# --- 2. THE VIP BOUNCER ---
-oauth2_admin_scheme = OAuth2PasswordBearer(tokenUrl="admin-auth/login")
-
-def get_current_admin(token: str = Depends(oauth2_admin_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate admin credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        admin_id_str: str = payload.get("sub")
-        role: str = payload.get("role")
-        
-        # Verify the role is specifically 'admin'
-        if admin_id_str is None or role != "admin":
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-        
-    admin = db.query(models.Admin).filter(models.Admin.admin_id == admin_id_str).first()
-    if admin is None:
-        raise credentials_exception
-    return admin
-
-# --- 3. THE BOOTSTRAP DOOR (Temporary) ---
+# --- 2. THE BOOTSTRAP DOOR (Temporary) ---
 @router.post("/bootstrap-first-admin", summary="⚠️ DEV ONLY: Create First Admin")
 def create_first_admin(admin_data: schemas.UserCreate, db: Session = Depends(get_db)):
     admin_count = db.query(models.Admin).count()
@@ -74,7 +44,7 @@ def create_first_admin(admin_data: schemas.UserCreate, db: Session = Depends(get
         name=admin_data.name,
         email=admin_data.email,
         password=hash_password(admin_data.password),
-        role="admin" # Set to 'admin' to match the bouncer's expectation
+        role="admin" 
     )
     db.add(new_admin)
     db.commit()

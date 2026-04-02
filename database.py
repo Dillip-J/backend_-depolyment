@@ -5,9 +5,17 @@ import os
 import dotenv
 dotenv.load_dotenv()  # Load environment variables from .env file
 
-SQLALCHEMY_DATABASE_URL =  os.getenv("DATABASE_URL")
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+if not SQLALCHEMY_DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is not set! Check your .env file.")
 
-engine = create_engine(SQLALCHEMY_DATABASE_URL)
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_pre_ping=True,   # Test connection before using — prevents dead connection errors
+    pool_recycle=300,     # Recycle connections every 5 min (Render closes idle ones at ~5 min)
+    pool_size=5,
+    max_overflow=10
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

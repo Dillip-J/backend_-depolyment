@@ -16,10 +16,6 @@ router = APIRouter(prefix="/services", tags=["Services & Catalog"])
 
 @router.get("/catalog/{item_type}")
 def get_global_catalog(item_type: str, db: Session = Depends(get_db)):
-    """
-    Fetches the global list of items. 
-    item_type can be: 'Medicine', 'LabTest', or 'DoctorService'
-    """
     if item_type == "DoctorService":
         return db.query(models.Service).all()
     else:
@@ -28,24 +24,22 @@ def get_global_catalog(item_type: str, db: Session = Depends(get_db)):
 
 @router.get("/provider/{provider_id}/menu")
 def get_provider_menu(provider_id: UUID, db: Session = Depends(get_db)):
-    """Fetches exactly what a specific Doctor, Pharmacy, or Lab is selling."""
     provider = db.query(models.ServiceProvider).filter(models.ServiceProvider.provider_id == provider_id).first()
     
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
 
     if provider.provider_type == "Doctor":
-        # Get doctor's specific services and prices
-        services = db.query(models.ProviderService)\
-            .options(joinedload(models.ProviderService.service))\
-            .filter(models.ProviderService.provider_id == provider_id).all()
+        # 🚨 FIX APPLIED: Changed to models.DoctorService
+        services = db.query(models.DoctorService)\
+            .filter(models.DoctorService.provider_id == provider_id).all()
         return {"provider_type": "Doctor", "menu": services}
         
     else:
-        # Get Pharmacy or Lab inventory
-        inventory = db.query(models.ProviderInventory)\
-            .options(joinedload(models.ProviderInventory.item))\
-            .filter(models.ProviderInventory.provider_id == provider_id).all()
+        # 🚨 FIX APPLIED: Changed to models.PharmacyInventory and loaded the medicine relation
+        inventory = db.query(models.PharmacyInventory)\
+            .options(joinedload(models.PharmacyInventory.medicine))\
+            .filter(models.PharmacyInventory.provider_id == provider_id).all()
         return {"provider_type": provider.provider_type, "menu": inventory}
 
 
@@ -60,20 +54,18 @@ def add_item_to_my_menu(
     db: Session = Depends(get_db),
     current_provider: models.ServiceProvider = Depends(get_current_provider) # <-- THE LOCK
 ):
-    """Allows a logged-in provider to add an item to their menu and set a price."""
-    
     if price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative.")
         
-    # If it's a doctor, add to ProviderService table
     if current_provider.provider_type == "Doctor":
-        existing = db.query(models.ProviderService).filter_by(
+        # 🚨 FIX APPLIED
+        existing = db.query(models.DoctorService).filter_by(
             provider_id=current_provider.provider_id, service_id=item_id
         ).first()
         if existing:
             raise HTTPException(status_code=400, detail="You already offer this service.")
             
-        new_service = models.ProviderService(
+        new_service = models.DoctorService(
             provider_id=current_provider.provider_id,
             service_id=item_id,
             price=price,
@@ -81,19 +73,19 @@ def add_item_to_my_menu(
         )
         db.add(new_service)
         
-    # If it's a Pharmacy or Lab, add to ProviderInventory table
     else:
-        existing = db.query(models.ProviderInventory).filter_by(
-            provider_id=current_provider.provider_id, item_id=item_id
+        # 🚨 FIX APPLIED
+        existing = db.query(models.PharmacyInventory).filter_by(
+            provider_id=current_provider.provider_id, medicine_id=item_id
         ).first()
         if existing:
             raise HTTPException(status_code=400, detail="Item already in your inventory.")
             
-        new_item = models.ProviderInventory(
+        new_item = models.PharmacyInventory(
             provider_id=current_provider.provider_id,
-            item_id=item_id,
+            medicine_id=item_id,
             price=price,
-            in_stock=1
+            in_stock=True
         )
         db.add(new_item)
         
@@ -106,18 +98,18 @@ def update_doctor_price(
     service_id: int,
     price: float,
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # <-- THE LOCK
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
 ):
-    """Allows DOCTORS to update the price of a service they offer."""
     if current_provider.provider_type != "Doctor":
         raise HTTPException(status_code=400, detail="Only doctors can use this route.")
         
     if price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative.")
 
-    link = db.query(models.ProviderService).filter(
-        models.ProviderService.provider_id == current_provider.provider_id,
-        models.ProviderService.service_id == service_id
+    # 🚨 FIX APPLIED
+    link = db.query(models.DoctorService).filter(
+        models.DoctorService.provider_id == current_provider.provider_id,
+        models.DoctorService.service_id == service_id
     ).first()
 
     if not link:
@@ -135,20 +127,18 @@ def update_inventory_status(
     price: float = None,
     in_stock: int = None, # 1 for yes, 0 for no
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # <-- THE LOCK
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
 ):
-    """Allows PHARMACIES/LABS to quickly mark a medicine as Out of Stock or change price."""
-    
     if current_provider.provider_type == "Doctor":
         raise HTTPException(status_code=400, detail="Doctors must use the /update-doctor-price route.")
         
     if price is not None and price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative.")
         
-    # Security: Ensure they can only edit their OWN inventory
-    inventory = db.query(models.ProviderInventory).filter(
-        models.ProviderInventory.inventory_id == inventory_id,
-        models.ProviderInventory.provider_id == current_provider.provider_id
+    # 🚨 FIX APPLIED
+    inventory = db.query(models.PharmacyInventory).filter(
+        models.PharmacyInventory.inventory_id == inventory_id,
+        models.PharmacyInventory.provider_id == current_provider.provider_id
     ).first()
     
     if not inventory:
@@ -157,7 +147,7 @@ def update_inventory_status(
     if price is not None:
         inventory.price = price
     if in_stock is not None:
-        inventory.in_stock = in_stock
+        inventory.in_stock = bool(in_stock)
         
     db.commit()
     return {"message": "Inventory updated successfully"}

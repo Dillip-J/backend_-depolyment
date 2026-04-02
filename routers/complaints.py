@@ -1,11 +1,12 @@
-#routers/complaints.py
+# routers/complaints.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Complaint, Booking
 import schemas
-from routers.auth import get_current_user # Patient auth
-from routers.admin_auth import get_current_admin # VIP Admin auth
+
+# 🚨 FIX APPLIED: Importing the guards from our central dependencies file!
+from dependencies import get_current_user, get_current_admin 
 
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
@@ -20,7 +21,7 @@ def create_complaint(complaint: schemas.ComplaintCreate, db: Session = Depends(g
     new_complaint = Complaint(
         booking_id=booking.booking_id,
         user_id=current_user.user_id,
-        provider_id=booking.provider_id, # Extracted from the booking!
+        provider_id=booking.provider_id, 
         complaint_text=complaint.complaint_text,
         status="open"
     )

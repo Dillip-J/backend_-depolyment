@@ -223,7 +223,7 @@ class ComplaintOut(ComplaintCreate, ORMBase):
     created_at: Optional[datetime] = None
 
 class UserOut(BaseModel):
-    user_id: str
+    user_id: UUID   # Fixed: was str, now matches the UUID type from the database model
     name: str
     email: str
 

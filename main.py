@@ -6,7 +6,7 @@ from database import engine, Base
 import models # Needed to create the uploads folder safely
 import os
 from fastapi import Response
-from routers import auth, booking, home, records, support, services, admin, admin_auth, providers, upload, users, websockets, reviews, complaints 
+from routers import auth, booking, home, records, support, services, admin, admin_auth, providers, upload, users, websockets, reviews, complaints, feedback
 # Initialize Database Tables
 models.Base.metadata.create_all(bind=engine)
  
@@ -26,7 +26,17 @@ except OSError:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "file://",  # Allow local HTML file opens
+        # Add your deployed GitHub Pages / Vercel URL here:
+        # "https://your-username.github.io",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +57,7 @@ app.include_router(users)
 app.include_router(websockets)
 app.include_router(reviews)
 app.include_router(complaints)
+app.include_router(feedback)
 
 
 @app.get("/")

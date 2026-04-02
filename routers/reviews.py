@@ -1,10 +1,12 @@
-#routers/reviews.py
+# routers/reviews.py
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
 from models import Review, Booking
 import schemas
-from routers.auth import get_current_user # Your patient auth dependency
+
+# 🚨 FIX APPLIED: Importing the guard from our central dependencies file!
+from dependencies import get_current_user 
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
 

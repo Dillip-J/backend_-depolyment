@@ -7,11 +7,7 @@ from database import get_db
 import models, schemas
 
 # IMPORT FROM OUR CENTRAL SECURITY ENGINE
-from utils.security import verify_password, get_password_hash, create_access_token
-import uuid
-
-# 🚨 IMPORTANT: These MUST match exactly what is inside your utils/security.py file!
-from utils.security import SECRET_KEY, ALGORITHM
+from utils.security import verify_password, get_password_hash, create_access_token, SECRET_KEY, ALGORITHM
 
 router = APIRouter(prefix="/auth", tags=["Patient Authentication"])
 
@@ -70,31 +66,5 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         }
     }
 
-
-# --- 3. THE BOUNCER (Token Decoder) ---
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    try:
-        # 1. Decode the Token
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        
-        # 2. Extract the user_id
-        user_id_str: str = payload.get("sub") 
-        if user_id_str is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception       
-    
-    # 3. Fetch the User from the Database
-    user = db.query(models.User).filter(models.User.user_id == user_id_str).first()
-    if user is None:
-        raise credentials_exception      
-    
-    # 4. Pass the full User object to the route!
-    return user
+# NOTE: get_current_user is defined in dependencies.py and shared across all routers.
+# Do not redefine it here to avoid conflicts.
