@@ -82,8 +82,9 @@ def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
             "provider_id": provider.provider_id, 
             "type": provider.provider_type, 
             "name": provider.name,
-            "category": provider.category,
-            "profile_photo_url": provider.profile_photo_url
+            # 🚨 THE FIX: Use getattr to prevent the crash if the column is missing!
+            "category": getattr(provider, "category", "General"),
+            "profile_photo_url": getattr(provider, "profile_photo_url", None)
         }
     }
 
