@@ -88,3 +88,13 @@ def admin_deep_search(
             "bookings": bookings
         }
     }
+
+#     @router.patch("/update-profile")
+# def update_admin_profile(
+#     new_phone: str,
+#     db: Session = Depends(get_db),
+#     current_admin: models.Admin = Depends(get_current_admin) # Ensures only logged-in admins can do this
+# ):
+#     current_admin.phone = new_phone
+#     db.commit()
+#     return {"message": "Profile updated successfully"}

@@ -1,11 +1,12 @@
 # routers/providers.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, String
 from database import get_db
 import models, schemas
 from datetime import date, datetime, time
-from uuid import UUID
+import shutil
+import os
 
 # IMPORT OUR SECURITY ENGINE & BOUNCER
 from utils.security import hash_password, verify_password, create_access_token
@@ -13,20 +14,48 @@ from dependencies import get_current_provider
 
 router = APIRouter(prefix="/providers", tags=["Service Providers"])
 
-# --- 1. Registration ---
+# --- 1. Registration (WITH FILE UPLOAD FIX) ---
 @router.post("/register")
-def register_provider(data: schemas.ProviderCreate, db: Session = Depends(get_db)):
-    if db.query(models.ServiceProvider).filter(models.ServiceProvider.email == data.email).first():
+async def register_provider(
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(...),
+    password: str = Form(...),
+    provider_type: str = Form(...),
+    license_number: str = Form(...),
+    category: str = Form(...),
+    license_document: UploadFile = File(None), # Accepts the actual PDF file!
+    db: Session = Depends(get_db)
+):
+    # Check if email exists
+    if db.query(models.ServiceProvider).filter(models.ServiceProvider.email == email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
+
+    # Save the file to the server if it exists
+    file_url = None
+    if license_document:
+        os.makedirs("uploads", exist_ok=True)
+        file_path = f"uploads/{license_document.filename}"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(license_document.file, buffer)
+        file_url = f"/{file_path}" # e.g., /uploads/my_license.pdf
+
+    # Hash the password
+    hashed_pw = hash_password(password)
+
+    # Save to database
+    new_provider = models.ServiceProvider(
+        name=name,
+        email=email,
+        phone=phone,
+        password=hashed_pw, # Mapped to correct DB column
+        provider_type=provider_type,
+        license_number=license_number,
+        category=category,
+        license_document_url=file_url, # Now it saves the actual path, not null!
+        status="pending"
+    )
     
-    # SECURITY FIX: Hash the password before saving!
-    hashed_pwd = hash_password(data.password)
-    
-    # Create dictionary from Pydantic model, swap plain password for hashed one
-    provider_data = data.model_dump()
-    provider_data["password"] = hashed_pwd
-    
-    new_provider = models.ServiceProvider(**provider_data, status="pending")
     db.add(new_provider)
     db.commit()
     return {"message": "Application submitted. Awaiting Admin approval."}
@@ -59,12 +88,11 @@ def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
     }
 
 # --- 3. Dynamic Dashboard Data (SECURED) ---
-@router.get("/dashboard/me") # SECURITY FIX: Removed {provider_id}
+@router.get("/dashboard/me") 
 def get_provider_dashboard(
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # THE LOCK
+    current_provider: models.ServiceProvider = Depends(get_current_provider) 
 ):
-    # No need to check if provider exists; the Bouncer already did!
     provider_id = current_provider.provider_id
 
     today_start = datetime.combine(date.today(), time.min)
@@ -114,11 +142,11 @@ def get_provider_dashboard(
     }
 
 # --- 4. Search Records (SECURED) ---
-@router.get("/search-my-records") # SECURITY FIX: Removed provider_id from URL
+@router.get("/search-my-records") 
 def provider_record_search(
     q: str, 
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # THE LOCK
+    current_provider: models.ServiceProvider = Depends(get_current_provider) 
 ):
     if len(q) < 2:
         return {"patients": [], "bookings": []}

@@ -12,19 +12,19 @@ from routers import auth, booking, home, records, support, services, admin, admi
 models.Base.metadata.create_all(bind=engine)
  
 app = FastAPI(title="V Healthcare API")
- 
+
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(content="", media_type="image/x-icon", status_code=204)
 
-# Create uploads directory if it doesn't exist
+# ONLY MOUNT ONCE (Using the safe try/except block) 
 try:
     os.makedirs("uploads", exist_ok=True)
     app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 except OSError:
     print("Warning: Running on a read-only filesystem (e.g., Vercel). Local uploads directory could not be created.")
 
-# 👇 FIXED CORS MIDDLEWARE 👇
+#  CORS MIDDLEWARE 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -41,7 +41,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-# 👆 ---------------------- 👆
+
 
 # Connect Routers
 app.include_router(auth)
