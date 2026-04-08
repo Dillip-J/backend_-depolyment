@@ -38,7 +38,6 @@ class Booking(Base):
     provider = relationship("ServiceProvider")
     doctor_service = relationship("DoctorService")
 
-# (Keep your existing Booking class here) ...
 
 class MedicalRecord(Base):
     __tablename__ = "medical_records"

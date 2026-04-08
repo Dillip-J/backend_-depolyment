@@ -16,7 +16,9 @@ from dependencies import get_current_provider
 
 router = APIRouter(prefix="/providers", tags=["Service Providers"])
 
-# --- NEW SCHEMAS ---
+# ==========================================
+# --- SCHEMAS ---
+# ==========================================
 class ScheduleUpdate(BaseModel):
     day: str
     slots: List[str]
@@ -25,7 +27,12 @@ class ProviderLocationUpdate(BaseModel):
     latitude: float
     longitude: float
 
+class BookingStatusUpdate(BaseModel):
+    status: str
+
+# ==========================================
 # --- 1. Registration ---
+# ==========================================
 @router.post("/register")
 async def register_provider(
     name: str = Form(...),
@@ -35,7 +42,7 @@ async def register_provider(
     provider_type: str = Form(...),
     license_number: str = Form(...),
     category: str = Form(...),
-    latitude: float = Form(None), # Added GPS fields for registration
+    latitude: float = Form(None), 
     longitude: float = Form(None),
     license_document: UploadFile = File(None), 
     db: Session = Depends(get_db)
@@ -61,7 +68,7 @@ async def register_provider(
         provider_type=provider_type,
         license_number=license_number,
         category=category,
-        latitude=latitude, # Save GPS if allowed during signup
+        latitude=latitude, 
         longitude=longitude,
         license_document_url=file_url, 
         status="pending"
@@ -71,7 +78,9 @@ async def register_provider(
     db.commit()
     return {"message": "Application submitted. Awaiting Admin approval."}
 
+# ==========================================
 # --- 2. Login ---
+# ==========================================
 @router.post("/login")
 def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
     provider = db.query(models.ServiceProvider).filter(models.ServiceProvider.email == creds.email).first()
@@ -96,7 +105,9 @@ def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
         }
     }
 
+# ==========================================
 # --- 3. Dynamic Dashboard Data ---
+# ==========================================
 @router.get("/dashboard/me") 
 def get_provider_dashboard(
     db: Session = Depends(get_db),
@@ -150,7 +161,9 @@ def get_provider_dashboard(
         "items": formatted_bookings
     }
 
+# ==========================================
 # --- 4. Search Records ---
+# ==========================================
 @router.get("/search-my-records") 
 def provider_record_search(
     q: str, 
@@ -186,7 +199,7 @@ def provider_record_search(
 
 
 # ==========================================
-# --- 5. PUBLIC DIRECTORY (For Patient Site) ---
+# --- 5. PUBLIC DIRECTORY ---
 # ==========================================
 @router.get("/all")
 def get_all_providers(db: Session = Depends(get_db)):
@@ -231,13 +244,13 @@ def update_provider_schedule(
     return {"message": f"Successfully saved {len(data.slots)} slots for {data.day}"}
 
 # ==========================================
-# --- 7. UPDATE CLINIC GPS LOCATION (MUST BE BEFORE /{provider_id}) ---
+# --- 7. UPDATE CLINIC GPS LOCATION ---
 # ==========================================
 @router.patch("/me/location")
 def update_provider_location(
     data: ProviderLocationUpdate,
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # 🔒 SECURE
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
 ):
     current_provider.latitude = data.latitude
     current_provider.longitude = data.longitude
@@ -247,7 +260,7 @@ def update_provider_location(
 
 
 # ==========================================
-# --- 8. PATIENT FETCHES SLOTS (WITH LOGIC) ---
+# --- 8. PATIENT FETCHES SLOTS ---
 # ==========================================
 @router.get("/{provider_id}/available-slots")
 def get_available_slots(provider_id: str, date: str = Query(...), db: Session = Depends(get_db)):
@@ -282,6 +295,30 @@ def get_available_slots(provider_id: str, date: str = Query(...), db: Session = 
     available_slots = [s for s in all_slots if s not in booked_slots]
     
     return available_slots
+
+
+# ==========================================
+# --- 9. ACCEPT / REJECT STATUS UPDATE ---
+# ==========================================
+@router.patch("/bookings/{booking_id}/status")
+def update_provider_booking_status(
+    booking_id: str,
+    data: BookingStatusUpdate,
+    db: Session = Depends(get_db),
+    current_provider: models.ServiceProvider = Depends(get_current_provider) 
+):
+    booking = db.query(models.Booking).filter(
+        models.Booking.booking_id == booking_id,
+        models.Booking.provider_id == current_provider.provider_id
+    ).first()
+
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    booking.booking_status = data.status
+    db.commit()
+    
+    return {"message": f"Status updated to {data.status}"} 
 # from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 # from sqlalchemy.orm import Session, joinedload
 # from sqlalchemy import or_, String
