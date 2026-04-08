@@ -38,7 +38,6 @@ class Booking(Base):
     provider = relationship("ServiceProvider")
     doctor_service = relationship("DoctorService")
 
-
 class MedicalRecord(Base):
     __tablename__ = "medical_records"
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
@@ -51,7 +50,7 @@ class MedicalRecord(Base):
 
 class Review(Base):
     __tablename__ = "reviews"
-    review_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) # Updated to UUID based on SQL
+    review_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
     rating = Column(Integer, nullable=False)
     comment = Column(Text)
@@ -59,7 +58,7 @@ class Review(Base):
 
 class Complaint(Base):
     __tablename__ = "complaints"
-    complaint_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) # Updated to UUID based on SQL
+    complaint_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) 
     booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
