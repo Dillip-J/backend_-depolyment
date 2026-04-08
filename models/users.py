@@ -13,6 +13,9 @@ class User(Base):
     password = Column(String, nullable=False)
     phone = Column(String)
     bookings = relationship("Booking", back_populates="user")
+    latitude = Column(Numeric(10, 8), nullable=True)
+    longitude = Column(Numeric(11, 8), nullable=True)
+    saved_address = Column(Text, nullable=True)
 
 class Admin(Base):
     __tablename__ = "admins"

@@ -151,10 +151,12 @@ class BookingCreate(BaseModel):
             bool(self.lab_test_id)
         ]
         
+        # Keep the safeguard preventing mixed bookings
         if sum(provided_services) > 1:
             raise ValueError("A booking cannot mix Doctors, Medicines, and Labs. Please select only ONE service type.")
-        if sum(provided_services) == 0:
-            raise ValueError("You must select at least one service, medicine, or lab test to book.")
+        
+        # 🚨 THE FIX: We deleted the `if sum(provided_services) == 0:` check!
+        # Now, a booking will succeed as long as it has a valid provider_id.
             
         return self
         

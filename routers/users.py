@@ -3,10 +3,20 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas
+from pydantic import BaseModel # <-- Required for LocationUpdate
 from utils.storage import storage as storage_engine
 from dependencies import get_current_user # <-- IMPORT THE BOUNCER
 
 router = APIRouter(prefix="/users", tags=["Patient Portal"])
+
+# ==========================================
+# 0. SCHEMAS
+# ==========================================
+class LocationUpdate(BaseModel):
+    latitude: float
+    longitude: float
+    address: str = "Saved Location"
+
 
 # ==========================================
 # 1. PROFILE MANAGEMENT
@@ -100,3 +110,25 @@ def delete_my_address(
     db.delete(address)
     db.commit()
     return {"message": "Address removed successfully."}
+
+# ==========================================
+# 3. GPS MEMORY SYNC
+# ==========================================
+@router.patch("/me/location")
+def update_my_location(
+    data: LocationUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user) # 🔒 SECURE
+):
+    # Update the user's primary location memory
+    current_user.latitude = data.latitude
+    current_user.longitude = data.longitude
+    current_user.saved_address = data.address
+    
+    db.commit()
+    
+    return {
+        "message": "Location synced successfully.", 
+        "lat": current_user.latitude, 
+        "lon": current_user.longitude
+    }

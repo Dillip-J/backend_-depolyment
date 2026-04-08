@@ -11,6 +11,10 @@ class ServiceProvider(Base):
     provider_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     provider_type = Column(String(50), nullable=False) # 'Doctor', 'Pharmacy', 'Lab'
     name = Column(String(255), nullable=False)
+    
+    # 🚨 ADDED: Category column for Patient Search Filtering
+    category = Column(String(100), nullable=True) # e.g., Cardiologist, General Physician
+    
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
     phone = Column(String(20))
@@ -30,6 +34,14 @@ class ServiceProvider(Base):
     # Add relationships for labs and pharmacies if you want to navigate from provider -> inventory
     pharmacy_inventory = relationship("PharmacyInventory", back_populates="provider", cascade="all, delete")
     lab_offerings = relationship("LabTestOffering", back_populates="provider", cascade="all, delete")
+
+class ProviderAvailability(Base):
+    __tablename__ = "provider_availability"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"))
+    day_of_week = Column(String) # e.g., "Monday"
+    time_slot = Column(String)   # e.g., "10:00 AM"
 
 class DoctorService(Base):
     __tablename__ = "doctor_services"
