@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from database import get_db
 import models, schemas
+from fastapi.security import OAuth2PasswordRequestForm
 
 # IMPORT FROM OUR CENTRAL SECURITY ENGINE
 from utils.security import verify_password, get_password_hash, create_access_token
