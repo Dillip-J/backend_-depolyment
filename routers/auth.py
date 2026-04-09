@@ -47,19 +47,19 @@ def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 # --- 2. PATIENT LOGIN ROUTE (FIXED FOR JSON) ---
 @router.post("/login")
-def login(data: LoginRequest, db: Session = Depends(get_db)):
-    # 1. Look up the user by email (Safely handling JSON input)
-    user = db.query(models.User).filter(models.User.email == data.email).first()
+def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # 1. Look up the user by email (form_data.username contains the email)
+    # Use .lower() to ensure case-insensitivity matches the frontend
+    user = db.query(models.User).filter(models.User.email == form_data.username.lower()).first()
     
     # 2. Verify Password Hash
-    if not user or not verify_password(data.password, user.password):
+    if not user or not verify_password(form_data.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # 3. Create the Patient Token
     try:
         access_token = create_access_token(data={"sub": str(user.user_id), "role": "user"})
     except Exception as e:
-        # If this triggers, your SECRET_KEY is missing in Render!
         print(f"JWT GENERATION ERROR: {e}")
         raise HTTPException(status_code=500, detail="Server Configuration Error: Missing Secret Key")
 
