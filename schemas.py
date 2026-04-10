@@ -1,10 +1,9 @@
-# # schemas.py
+# schemas.py
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, model_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
 from decimal import Decimal
-
 
 class ORMBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -18,7 +17,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     id: Optional[UUID] = None
-    role: Optional[str] = None # e.g., 'user', 'Doctor', 'Pharmacy'
+    role: Optional[str] = None 
 
 # ==========================================
 # AUTHENTICATION SCHEMAS
@@ -37,15 +36,16 @@ class ProviderCreate(BaseModel):
     name: str
     email: EmailStr
     password: str
-    provider_type: str # 'Doctor', 'Pharmacy', 'Lab'
+    provider_type: str 
     phone: Optional[str] = None
     address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
-    # We don't usually accept file URLs directly on signup, they upload files AFTER signup,
-    # but we can leave these here if your frontend sends them.
     profile_photo_url: Optional[str] = None
     license_document_url: Optional[str] = None
+    
+    category: Optional[str] = "General"
+    price: Optional[float] = 500.00
 
 class ProviderLogin(BaseModel):
     email: EmailStr
@@ -62,7 +62,6 @@ class ProviderResponse(ORMBase):
 # THE 3 DOMAINS: DOCTORS, PHARMACIES, LABS
 # ==========================================
 
-# --- 1. Doctors ---
 class DoctorServiceCreate(BaseModel):
     service_name: str
     description: Optional[str] = None
@@ -80,7 +79,6 @@ class DoctorServiceResponse(ORMBase):
     service_name: str
     price: Decimal
 
-# --- 2. Pharmacies (Medicines & Inventory) ---
 class MedicineCreate(BaseModel):
     medicine_name: str
     manufacturer: Optional[str] = None
@@ -101,9 +99,8 @@ class PharmacyInventoryResponse(ORMBase):
     inventory_id: int
     price: Decimal
     in_stock: bool
-    medicine: MedicineResponse # Nests the medicine details
+    medicine: MedicineResponse 
 
-# --- 3. Labs (Tests & Offerings) ---
 class LabTestCreate(BaseModel):
     test_name: str
     category: Optional[str] = None
@@ -123,7 +120,6 @@ class LabOfferingCreate(BaseModel):
 # BOOKINGS & TRANSACTIONS
 # ==========================================
 class BookingCreate(BaseModel):
-    # We remove user_id from here! The Bouncer (JWT) will provide the user_id securely.
     provider_id: UUID
     
     doctor_service_id: Optional[int] = None
@@ -136,7 +132,6 @@ class BookingCreate(BaseModel):
     longitude: Optional[float] = None
     order_notes: Optional[str] = None
 
-    # --- NEW: MULTI-PATIENT / OVERRIDE FIELDS ---
     patient_name: Optional[str] = None
     patient_age: Optional[int] = None
     patient_gender: Optional[str] = None
@@ -144,27 +139,20 @@ class BookingCreate(BaseModel):
 
     @model_validator(mode='after')
     def check_exclusive_service(self):
-        # Count how many of the service IDs actually have a value
         provided_services = [
             bool(self.doctor_service_id), 
             bool(self.medicine_id), 
             bool(self.lab_test_id)
         ]
-        
-        # Keep the safeguard preventing mixed bookings
         if sum(provided_services) > 1:
             raise ValueError("A booking cannot mix Doctors, Medicines, and Labs. Please select only ONE service type.")
-        
-        # 🚨 THE FIX: We deleted the `if sum(provided_services) == 0:` check!
-        # Now, a booking will succeed as long as it has a valid provider_id.
             
         return self
         
 class BookingResponse(ORMBase):
-    booking_id: UUID
+    booking_id: int  # 🚨 FIXED: Now an int!
     booking_status: str
     scheduled_time: Optional[datetime]
-    # In a full app, you would nest the user and provider details here too
 
 # ==========================================
 # SAVED ADDRESSES
@@ -188,44 +176,39 @@ class SavedAddressResponse(ORMBase):
 # FEEDBACK & RECORDS
 # ==========================================
 
-# --- Medical Records ---
 class MedicalRecordCreate(BaseModel):
-    booking_id: UUID
+    booking_id: int  # 🚨 FIXED: Now an int!
     diagnosis: str
     report_url: Optional[str] = None
 
 class MedicalRecordResponse(ORMBase):
     record_id: int
-    booking_id: UUID
+    booking_id: int  # 🚨 FIXED: Now an int!
     diagnosis: str
     report_url: Optional[str]
 
-# --- Reviews ---
 class ReviewCreate(BaseModel):
-    booking_id: UUID
+    booking_id: int  # 🚨 FIXED: Now an int!
     rating: int 
     comment: Optional[str] = None
 
 class ReviewOut(ReviewCreate, ORMBase):
-    review_id: UUID
+    review_id: int   # 🚨 FIXED: Now an int!
     created_at: Optional[datetime] = None
 
-# --- Complaints ---
 class ComplaintCreate(BaseModel):
-    booking_id: UUID
+    booking_id: int  # 🚨 FIXED: Now an int!
     complaint_text: str
-    # Security: We removed user_id and provider_id. 
-    # The Bouncer provides user_id, and the database provides provider_id.
 
 class ComplaintOut(ComplaintCreate, ORMBase):
-    complaint_id: UUID
+    complaint_id: int # 🚨 FIXED: Now an int!
     user_id: UUID
     provider_id: UUID
     status: str
     created_at: Optional[datetime] = None
 
 class UserOut(BaseModel):
-    user_id: UUID   # Fixed: was str, now matches the UUID type from the database model
+    user_id: UUID 
     name: str
     email: str
 

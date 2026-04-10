@@ -1,3 +1,4 @@
+# models/bookings.py
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import Column, String, BigInteger, Numeric, Text, ForeignKey, DateTime, Integer
 from sqlalchemy.orm import relationship
@@ -8,8 +9,9 @@ from datetime import datetime
 class Booking(Base):
     __tablename__ = "bookings"
     __table_args__ = {'extend_existing': True} # 🚨 The magic shield
+    booking_id = Column(Integer, primary_key=True, autoincrement=True)
     
-    booking_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # Left as UUID because Users and Providers tables still use UUIDs
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
     
@@ -42,7 +44,7 @@ class MedicalRecord(Base):
     __table_args__ = {'extend_existing': True}
     
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id", ondelete="SET NULL"))
+    booking_id = Column(Integer, ForeignKey("bookings.booking_id", ondelete="SET NULL"))
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
     diagnosis = Column(Text)
@@ -55,8 +57,8 @@ class Review(Base):
     __tablename__ = "reviews"
     __table_args__ = {'extend_existing': True}
     
-    review_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
+    review_id = Column(Integer, primary_key=True, autoincrement=True)
+    booking_id = Column(Integer, ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
     rating = Column(Integer, nullable=False)
     comment = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -67,8 +69,9 @@ class Complaint(Base):
     __tablename__ = "complaints"
     __table_args__ = {'extend_existing': True}
     
-    complaint_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4) 
-    booking_id = Column(UUID(as_uuid=True), ForeignKey("bookings.booking_id", ondelete="CASCADE"), nullable=False)
+    complaint_id = Column(Integer, primary_key=True, autoincrement=True) 
+    
+    booking_id = Column(Integer, ForeignKey("bookings.booking_id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
     complaint_text = Column(Text, nullable=False)

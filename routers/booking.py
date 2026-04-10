@@ -35,7 +35,7 @@ def create_booking(
 # ==========================================
 @router.patch("/{booking_id}/cancel")
 def cancel_booking(
-    booking_id: UUID, # Ensure it expects a UUID, not an int
+    booking_id: int, # Ensure it expects a UUID, not an int
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user) # <-- THE LOCK
 ):

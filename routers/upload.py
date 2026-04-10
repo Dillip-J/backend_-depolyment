@@ -69,19 +69,20 @@ async def remove_provider_photo(
 
 @router.post("/medical-report/{booking_id}")
 async def upload_medical_report(
-    booking_id: str,
+    booking_id: int, 
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user) # <-- THE LOCK (Patient Only)
+    # 🚨 THE FIX: Only Providers can upload reports now, not Patients!
+    current_provider: models.ServiceProvider = Depends(get_current_provider) 
 ):
     # Security check 1: Does this booking exist?
     booking = db.query(models.Booking).filter(models.Booking.booking_id == booking_id).first()
     if not booking:
          raise HTTPException(status_code=404, detail="Booking not found.")
          
-    # Security check 2: IDOR Protection. Does this booking actually BELONG to the logged-in user?
-    if str(booking.user_id) != str(current_user.user_id):
-        raise HTTPException(status_code=403, detail="Not authorized to upload to this record.")
+    # Security check 2: IDOR Protection. Does this booking belong to THIS Doctor/Lab?
+    if str(booking.provider_id) != str(current_provider.provider_id):
+        raise HTTPException(status_code=403, detail="Not authorized to upload reports for other providers' bookings.")
 
     file_bytes = await file.read()
     file_extension = file.filename.split(".")[-1]
@@ -92,10 +93,14 @@ async def upload_medical_report(
         booking_id=booking.booking_id,
         user_id=booking.user_id,
         provider_id=booking.provider_id,
-        diagnosis="Report Uploaded via Patient API", 
+        diagnosis="Report Uploaded via Provider API", 
         report_url=file_url
     )
     db.add(new_record)
+    
+    # 🚨 Auto-complete the booking once the report is attached
+    booking.booking_status = "completed"
+    
     db.commit()
     
     return {"message": "Medical report uploaded securely and linked to patient.", "url": file_url}

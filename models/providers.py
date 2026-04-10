@@ -7,13 +7,14 @@ import uuid
 
 class ServiceProvider(Base):
     __tablename__ = "service_providers"
+    __table_args__ = {'extend_existing': True} # 🚨 Added the magic shield!
     
     provider_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     provider_type = Column(String(50), nullable=False) # 'Doctor', 'Pharmacy', 'Lab'
     name = Column(String(255), nullable=False)
     
-    # 🚨 ADDED: Category column for Patient Search Filtering
-    category = Column(String(100), nullable=True) # e.g., Cardiologist, General Physician
+    category = Column(String(100), nullable=True) 
+    price = Column(Numeric(10, 2), nullable=True) # 🚨 ADDED THE MISSING PRICE COLUMN!
     
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
@@ -31,7 +32,6 @@ class ServiceProvider(Base):
     # Relationships
     doctor_services = relationship("DoctorService", back_populates="provider", cascade="all, delete")
     bookings = relationship("Booking", back_populates="provider")
-    # Add relationships for labs and pharmacies if you want to navigate from provider -> inventory
     pharmacy_inventory = relationship("PharmacyInventory", back_populates="provider", cascade="all, delete")
     lab_offerings = relationship("LabTestOffering", back_populates="provider", cascade="all, delete")
 
