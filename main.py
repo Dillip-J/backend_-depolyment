@@ -25,10 +25,16 @@ try:
 except OSError:
     print("Warning: Running on a read-only filesystem (e.g., Vercel). Local uploads directory could not be created.")
 
+#origin
+origins = [
+    "http://localhost:5500",      # For local testing
+    "http://127.0.0.1:5500",      # For local testing
+    "https://dillip-j.github.io"  # 🚨 YOUR LIVE GITHUB PAGES URL
+]
 #  CORS MIDDLEWARE 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],         # Lets your frontend talk to the backend
+    allow_origins=origins,         # Lets your frontend talk to the backend
     allow_credentials=True,      # Allows cookies/tokens
     allow_methods=["*"],         # Allows GET, POST, PUT, DELETE, etc.
     allow_headers=["*"],         # Allows all headers (like Authorization)
