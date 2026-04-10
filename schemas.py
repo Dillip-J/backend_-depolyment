@@ -32,6 +32,11 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class UserUpdate(BaseModel):
+    # Optional means they can update just the name, just the phone, or both!
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
 class ProviderCreate(BaseModel):
     name: str
     email: EmailStr

@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas
-from pydantic import BaseModel # <-- Required for LocationUpdate
+from pydantic import BaseModel 
 from utils.storage import storage as storage_engine
 from dependencies import get_current_user # <-- IMPORT THE BOUNCER
 
@@ -39,6 +39,30 @@ def get_my_profile(
         "saved_addresses": addresses
     }
 
+# 🚨 THE PHASE 2 BACKEND ROUTE 
+@router.patch("/me")
+def update_my_basic_info(
+    data: schemas.UserUpdate, # <-- Using your centralized schema!
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user) # <-- THE LOCK
+):
+    """Updates the user's basic profile information securely."""
+    
+    # Only update the fields they actually typed in!
+    if data.name:
+        current_user.name = data.name
+    if data.phone:
+        current_user.phone = data.phone
+        
+    db.commit()
+    db.refresh(current_user)
+    
+    return {
+        "message": "Profile updated successfully!", 
+        "name": current_user.name, 
+        "phone": current_user.phone
+    }
+
 @router.post("/me/profile-photo")
 async def update_my_photo(
     file: UploadFile = File(...), 
@@ -64,6 +88,7 @@ async def update_my_photo(
     db.commit()
     
     return {"message": "Profile photo updated", "url": new_url}
+
 
 # ==========================================
 # 2. AMAZON-STYLE ADDRESS BOOK
@@ -110,6 +135,7 @@ def delete_my_address(
     db.delete(address)
     db.commit()
     return {"message": "Address removed successfully."}
+
 
 # ==========================================
 # 3. GPS MEMORY SYNC
