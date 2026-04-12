@@ -71,12 +71,12 @@ async def register_provider(
         latitude=latitude, 
         longitude=longitude,
         license_document_url=file_url, 
-        status="pending" # Stays pending until Admin approves!
+        status="approved" # Automatically approved for immediate access
     )
     
     db.add(new_provider)
     db.commit()
-    return {"message": "Application submitted. Awaiting Admin approval."}
+    return {"message": "Application submitted and approved. You can now log in."}
 # ==========================================
 # --- 2. Login ---
 # ==========================================
@@ -86,9 +86,6 @@ def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
     
     if not provider or not verify_password(creds.password, provider.password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-    if provider.status == "pending":
-        raise HTTPException(status_code=403, detail="Account pending admin approval")
         
     token = create_access_token(data={"sub": str(provider.provider_id), "role": "provider"})
         
