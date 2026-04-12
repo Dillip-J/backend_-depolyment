@@ -7,14 +7,14 @@ import uuid
 
 class ServiceProvider(Base):
     __tablename__ = "service_providers"
-    __table_args__ = {'extend_existing': True} # 🚨 Added the magic shield!
+    __table_args__ = {'extend_existing': True} 
     
     provider_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     provider_type = Column(String(50), nullable=False) # 'Doctor', 'Pharmacy', 'Lab'
     name = Column(String(255), nullable=False)
     
     category = Column(String(100), nullable=True) 
-    price = Column(Numeric(10, 2), nullable=True) # 🚨 ADDED THE MISSING PRICE COLUMN!
+    price = Column(Numeric(10, 2), nullable=True) 
     
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
@@ -33,7 +33,8 @@ class ServiceProvider(Base):
     doctor_services = relationship("DoctorService", back_populates="provider", cascade="all, delete")
     bookings = relationship("Booking", back_populates="provider")
     pharmacy_inventory = relationship("PharmacyInventory", back_populates="provider", cascade="all, delete")
-    lab_offerings = relationship("LabTestOffering", back_populates="provider", cascade="all, delete")
+    # 🚨 THE FIX: Updated the string to match the new class name!
+    lab_offerings = relationship("LabOffering", back_populates="provider", cascade="all, delete")
 
 class ProviderAvailability(Base):
     __tablename__ = "provider_availability"
@@ -78,7 +79,7 @@ class PharmacyInventory(Base):
     provider = relationship("ServiceProvider", back_populates="pharmacy_inventory")
     medicine = relationship("Medicine")
 
-## --- LAB DOMAIN ---
+# --- LAB DOMAIN ---
 class LabTest(Base):
     __tablename__ = "lab_tests"
     __table_args__ = {'extend_existing': True}
@@ -88,7 +89,7 @@ class LabTest(Base):
     category = Column(String(100))
     description = Column(Text)
 
-class LabOffering(Base): # 🚨 THE FIX: Renamed from LabTestOffering to match services.py
+class LabOffering(Base): 
     __tablename__ = "lab_test_offerings"
     __table_args__ = {'extend_existing': True}
     
@@ -99,19 +100,6 @@ class LabOffering(Base): # 🚨 THE FIX: Renamed from LabTestOffering to match s
     home_collection_available = Column(Boolean, default=False)
 
     provider = relationship("ServiceProvider", back_populates="lab_offerings")
-    lab_test = relationship("LabTest") # 🚨 THE FIX: Renamed from 'test' to 'lab_test'
+    lab_test = relationship("LabTest") 
 
-
-# ==========================================
-# 🚨 THE FIX: ADDED THE MISSING GLOBAL CATALOG
-# ==========================================
-class CatalogItem(Base):
-    """Master list of all general services across the platform"""
-    __tablename__ = "catalog_items"
-    __table_args__ = {'extend_existing': True}
-    
-    item_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    item_type = Column(String(50), nullable=False) # 'DoctorService', 'Medicine', 'LabTest'
-    name = Column(String(255), nullable=False)
-    category = Column(String(100))
-    description = Column(Text)
+# 🚨 NOTICE: CATALOG ITEM IS GONE FROM THIS FILE. IT LIVES IN CATALOG.PY NOW.
