@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 import models 
 import os
-from routers import auth, booking, home, records, support, services, admin, admin_auth, providers, upload, users, websockets, reviews, complaints, feedback, doctor_bookings
+from routers import auth, booking, home, records, support, services, admin, admin_auth, providers, upload, users, websockets, reviews, complaints, feedback
 # Initialize Database Tables
 models.Base.metadata.create_all(bind=engine)
  
