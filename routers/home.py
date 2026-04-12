@@ -1,6 +1,7 @@
 # routers/home.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import or_  # 🚨 FIX: Imported or_ to handle ASAP bookings
 from database import get_db
 import models
 from datetime import datetime
@@ -47,8 +48,12 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
         active_booking = db.query(models.Booking).filter(
             models.Booking.user_id == user_id, 
             models.Booking.booking_status == 'confirmed',
-            models.Booking.scheduled_time > datetime.utcnow()
-        ).order_by(models.Booking.scheduled_time.asc()).first()
+            # 🚨 FIX: Safely handles scheduled times OR ASAP (null) times!
+            or_(
+                models.Booking.scheduled_time > datetime.utcnow(),
+                models.Booking.scheduled_time == None
+            )
+        ).order_by(models.Booking.created_at.asc()).first() # 🚨 FIX: Ordered by creation time so NULLs don't crash
         
         if active_booking:
             provider = db.query(models.ServiceProvider).filter(

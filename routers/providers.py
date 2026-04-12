@@ -1,4 +1,5 @@
 # routers/providers.py
+from utils.storage import storage as storage_engine
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, String
@@ -52,11 +53,10 @@ async def register_provider(
 
     file_url = None
     if license_document:
-        os.makedirs("uploads", exist_ok=True)
-        file_path = f"uploads/{license_document.filename}"
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(license_document.file, buffer)
-        file_url = f"/{file_path}" 
+        # 🚨 THE FIX: No more Render Time Bomb! Use Cloud Storage.
+        file_bytes = await license_document.read()
+        file_extension = license_document.filename.split(".")[-1]
+        file_url = storage_engine.upload_file(file_bytes, file_extension, folder_name="provider_licenses")
 
     hashed_pw = hash_password(password)
 
@@ -71,13 +71,12 @@ async def register_provider(
         latitude=latitude, 
         longitude=longitude,
         license_document_url=file_url, 
-        status="pending"
+        status="pending" # Stays pending until Admin approves!
     )
     
     db.add(new_provider)
     db.commit()
     return {"message": "Application submitted. Awaiting Admin approval."}
-
 # ==========================================
 # --- 2. Login ---
 # ==========================================
@@ -203,7 +202,8 @@ def provider_record_search(
 # ==========================================
 @router.get("/all")
 def get_all_providers(db: Session = Depends(get_db)):
-    providers = db.query(models.ServiceProvider).filter(models.ServiceProvider.status == "verified").all()
+    # 🚨 THE FIX: Changed "verified" to "approved" to match the Admin system!
+    providers = db.query(models.ServiceProvider).filter(models.ServiceProvider.status == "approved").all()
     
     result = []
     for p in providers:

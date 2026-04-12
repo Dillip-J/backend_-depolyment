@@ -1,20 +1,13 @@
 # routers/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 from database import get_db
 import models, schemas
-from fastapi.security import OAuth2PasswordRequestForm
 
 # IMPORT FROM OUR CENTRAL SECURITY ENGINE
 from utils.security import verify_password, get_password_hash, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Patient Authentication"])
-
-# --- NEW: JSON Login Schema ---
-class LoginRequest(BaseModel):
-    email: str
-    password: str
 
 # --- 1. PATIENT SIGNUP (REGISTRATION) ROUTE ---
 @router.post("/register", response_model=schemas.UserOut)
@@ -46,15 +39,14 @@ def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
-# --- 2. PATIENT LOGIN ROUTE (FIXED FOR JSON) ---
+# --- 2. PATIENT LOGIN ROUTE (FIXED FOR REAL JSON) ---
 @router.post("/login")
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # 1. Look up the user by email (form_data.username contains the email)
-    # Use .lower() to ensure case-insensitivity matches the frontend
-    user = db.query(models.User).filter(models.User.email == form_data.username.lower()).first()
+def login(creds: schemas.UserLogin, db: Session = Depends(get_db)):
+    # 1. Look up the user by email
+    user = db.query(models.User).filter(models.User.email == creds.email.lower()).first()
     
     # 2. Verify Password Hash
-    if not user or not verify_password(form_data.password, user.password):
+    if not user or not verify_password(creds.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # 3. Create the Patient Token

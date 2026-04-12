@@ -16,10 +16,14 @@ router = APIRouter(prefix="/services", tags=["Services & Catalog"])
 
 @router.get("/catalog/{item_type}")
 def get_global_catalog(item_type: str, db: Session = Depends(get_db)):
-    if item_type == "DoctorService":
-        return db.query(models.Service).all()
-    else:
-        return db.query(models.CatalogItem).filter(models.CatalogItem.item_type == item_type).all()
+    # Assuming CatalogItem holds master lists of Services, Medicines, and Lab Tests
+    items = db.query(models.CatalogItem).filter(models.CatalogItem.item_type == item_type).all()
+    if not items:
+        # Fallback if CatalogItem isn't populated, but the individual tables exist
+        if item_type == "DoctorService":
+            return db.query(models.DoctorService).all()
+        # Add other fallbacks if needed
+    return items
 
 
 @router.get("/provider/{provider_id}/menu")
@@ -30,17 +34,28 @@ def get_provider_menu(provider_id: UUID, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Provider not found")
 
     if provider.provider_type == "Doctor":
-        # 🚨 FIX APPLIED: Changed to models.DoctorService
         services = db.query(models.DoctorService)\
             .filter(models.DoctorService.provider_id == provider_id).all()
         return {"provider_type": "Doctor", "menu": services}
         
-    else:
-        # 🚨 FIX APPLIED: Changed to models.PharmacyInventory and loaded the medicine relation
+    elif provider.provider_type == "Pharmacy":
         inventory = db.query(models.PharmacyInventory)\
             .options(joinedload(models.PharmacyInventory.medicine))\
             .filter(models.PharmacyInventory.provider_id == provider_id).all()
-        return {"provider_type": provider.provider_type, "menu": inventory}
+        return {"provider_type": "Pharmacy", "menu": inventory}
+        
+    elif provider.provider_type == "Lab":
+        # 🚨 THE FIX: Handle Labs properly!
+        # Assuming you have a LabOffering or similar model
+        try:
+             offerings = db.query(models.LabOffering)\
+                .options(joinedload(models.LabOffering.lab_test))\
+                .filter(models.LabOffering.provider_id == provider_id).all()
+             return {"provider_type": "Lab", "menu": offerings}
+        except AttributeError:
+             return {"provider_type": "Lab", "menu": [], "message": "Lab offerings model not fully configured yet."}
+    else:
+        raise HTTPException(status_code=400, detail="Unknown provider type.")
 
 
 # ==========================================
@@ -58,7 +73,6 @@ def add_item_to_my_menu(
         raise HTTPException(status_code=400, detail="Price cannot be negative.")
         
     if current_provider.provider_type == "Doctor":
-        # 🚨 FIX APPLIED
         existing = db.query(models.DoctorService).filter_by(
             provider_id=current_provider.provider_id, service_id=item_id
         ).first()
@@ -73,8 +87,7 @@ def add_item_to_my_menu(
         )
         db.add(new_service)
         
-    else:
-        # 🚨 FIX APPLIED
+    elif current_provider.provider_type == "Pharmacy":
         existing = db.query(models.PharmacyInventory).filter_by(
             provider_id=current_provider.provider_id, medicine_id=item_id
         ).first()
@@ -88,6 +101,9 @@ def add_item_to_my_menu(
             in_stock=True
         )
         db.add(new_item)
+    
+    else: # Lab
+         raise HTTPException(status_code=400, detail="Adding lab tests requires the /me/add-lab-test route.")
         
     db.commit()
     return {"message": "Successfully added to your menu!"}
@@ -106,7 +122,6 @@ def update_doctor_price(
     if price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative.")
 
-    # 🚨 FIX APPLIED
     link = db.query(models.DoctorService).filter(
         models.DoctorService.provider_id == current_provider.provider_id,
         models.DoctorService.service_id == service_id
@@ -135,7 +150,6 @@ def update_inventory_status(
     if price is not None and price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative.")
         
-    # 🚨 FIX APPLIED
     inventory = db.query(models.PharmacyInventory).filter(
         models.PharmacyInventory.inventory_id == inventory_id,
         models.PharmacyInventory.provider_id == current_provider.provider_id

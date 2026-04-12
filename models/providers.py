@@ -78,16 +78,20 @@ class PharmacyInventory(Base):
     provider = relationship("ServiceProvider", back_populates="pharmacy_inventory")
     medicine = relationship("Medicine")
 
-# --- LAB DOMAIN ---
+## --- LAB DOMAIN ---
 class LabTest(Base):
     __tablename__ = "lab_tests"
+    __table_args__ = {'extend_existing': True}
+    
     test_id = Column(BigInteger, primary_key=True, autoincrement=True)
     test_name = Column(String(255), nullable=False)
     category = Column(String(100))
     description = Column(Text)
 
-class LabTestOffering(Base):
+class LabOffering(Base): # 🚨 THE FIX: Renamed from LabTestOffering to match services.py
     __tablename__ = "lab_test_offerings"
+    __table_args__ = {'extend_existing': True}
+    
     offering_id = Column(BigInteger, primary_key=True, autoincrement=True)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
     test_id = Column(BigInteger, ForeignKey("lab_tests.test_id", ondelete="CASCADE"), nullable=False)
@@ -95,4 +99,19 @@ class LabTestOffering(Base):
     home_collection_available = Column(Boolean, default=False)
 
     provider = relationship("ServiceProvider", back_populates="lab_offerings")
-    test = relationship("LabTest")
+    lab_test = relationship("LabTest") # 🚨 THE FIX: Renamed from 'test' to 'lab_test'
+
+
+# ==========================================
+# 🚨 THE FIX: ADDED THE MISSING GLOBAL CATALOG
+# ==========================================
+class CatalogItem(Base):
+    """Master list of all general services across the platform"""
+    __tablename__ = "catalog_items"
+    __table_args__ = {'extend_existing': True}
+    
+    item_id = Column(BigInteger, primary_key=True, autoincrement=True)
+    item_type = Column(String(50), nullable=False) # 'DoctorService', 'Medicine', 'LabTest'
+    name = Column(String(255), nullable=False)
+    category = Column(String(100))
+    description = Column(Text)

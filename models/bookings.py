@@ -45,13 +45,15 @@ class MedicalRecord(Base):
     
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
     booking_id = Column(Integer, ForeignKey("bookings.booking_id", ondelete="SET NULL"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
-    provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
+    
+    # 🚨 THE FIX: Removed user_id and provider_id. 
+    # The database will now rely on the Booking relationship (perfect normalization!)
+    
     diagnosis = Column(Text)
     report_url = Column(String(500))
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    booking = relationship("Booking") 
+    booking = relationship("Booking")
 
 class Review(Base):
     __tablename__ = "reviews"

@@ -5,8 +5,8 @@ from database import get_db
 import models
 from utils.storage import storage as storage_engine
 
-# IMPORT THE BOUNCERS
-from dependencies import get_current_provider, get_current_user
+# IMPORT THE BOUNCER
+from dependencies import get_current_provider
 
 router = APIRouter(prefix="/files", tags=["File Management"])
 
@@ -18,14 +18,11 @@ router = APIRouter(prefix="/files", tags=["File Management"])
 async def upload_provider_photo(
     file: UploadFile = File(...), 
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # <-- THE LOCK
+    current_provider: models.ServiceProvider = Depends(get_current_provider) # 🔒 SECURED
 ):
     # Security: Verify it's actually an image
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only images are allowed for profiles.")
-
-    # We NO LONGER need to query the DB or use a hardcoded ID. 
-    # The Bouncer guarantees `current_provider` is real and logged in.
 
     file_bytes = await file.read()
     file_extension = file.filename.split(".")[-1]
@@ -36,7 +33,6 @@ async def upload_provider_photo(
     if current_provider.profile_photo_url:
         storage_engine.delete_file(current_provider.profile_photo_url)
         
-    # Save the new URL directly to the provider object the Bouncer handed us
     current_provider.profile_photo_url = new_url
     db.commit()
     
@@ -46,7 +42,7 @@ async def upload_provider_photo(
 @router.delete("/provider/profile-photo")
 async def remove_provider_photo(
     db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) # <-- THE LOCK
+    current_provider: models.ServiceProvider = Depends(get_current_provider) # 🔒 SECURED
 ):
     if not current_provider.profile_photo_url:
         raise HTTPException(status_code=400, detail="No profile photo to delete.")
@@ -55,7 +51,6 @@ async def remove_provider_photo(
     success = storage_engine.delete_file(current_provider.profile_photo_url)
     
     if success:
-        # Remove the link from the database
         current_provider.profile_photo_url = None
         db.commit()
         return {"message": "Profile photo removed successfully."}
@@ -72,8 +67,7 @@ async def upload_medical_report(
     booking_id: int, 
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    # 🚨 THE FIX: Only Providers can upload reports now, not Patients!
-    current_provider: models.ServiceProvider = Depends(get_current_provider) 
+    current_provider: models.ServiceProvider = Depends(get_current_provider) # 🔒 SECURED
 ):
     # Security check 1: Does this booking exist?
     booking = db.query(models.Booking).filter(models.Booking.booking_id == booking_id).first()
@@ -89,16 +83,15 @@ async def upload_medical_report(
     
     file_url = storage_engine.upload_file(file_bytes, file_extension, folder_name="medical_records")
     
+    # 🚨 THE FIX: Removed redundant user_id and provider_id to prevent DB crashes
     new_record = models.MedicalRecord(
         booking_id=booking.booking_id,
-        user_id=booking.user_id,
-        provider_id=booking.provider_id,
         diagnosis="Report Uploaded via Provider API", 
         report_url=file_url
     )
     db.add(new_record)
     
-    # 🚨 Auto-complete the booking once the report is attached
+    # Auto-complete the booking once the report is attached
     booking.booking_status = "completed"
     
     db.commit()
