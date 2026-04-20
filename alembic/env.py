@@ -6,25 +6,23 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
 
-# 1. Import dotenv to read your .env file
+# 1. Import dotenv
 from dotenv import load_dotenv
 
-# 2. Add your project directory to the path so it can find database.py
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
-from database import Base
-# 🚨 THE FIX: Force Alembic to read all your separated model files!
-from models import users, providers, bookings, catalog 
-
-# 3. Load the .env file
+# 🚨 THE FIX: Load the .env file BEFORE you import the database!
 load_dotenv()
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# 2. Add your project directory to the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+# NOW it is safe to import the database because the environment is loaded!
+from database import Base
+from models import users, providers, bookings, catalog 
+
+# this is the Alembic Config object
 config = context.config
 
-# 🚨 Override the alembic.ini url with your secure .env URL!
-# Make sure "DATABASE_URL" matches exactly what you named it in your .env file
+# Override the alembic.ini url with your secure .env URL!
 database_url = os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
@@ -36,6 +34,7 @@ if config.config_file_name is not None:
 # 4. Set the target metadata
 target_metadata = Base.metadata
 
+# ... KEEP THE REST OF YOUR FUNCTIONS (run_migrations_offline, etc) BELOW THIS EXACTLY AS THEY ARE ...
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
