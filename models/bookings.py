@@ -15,7 +15,8 @@ class Booking(Base):
     __tablename__ = "bookings"
     __table_args__ = {'extend_existing': True} 
     
-    booking_id = Column(String(20), primary_key=True, default=generate_booking_string, index=True)
+    # 🚨 FIXED: Changed to 40 so your old UUIDs don't crash the database!
+    booking_id = Column(String(40), primary_key=True, default=generate_booking_string, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
     
@@ -36,7 +37,6 @@ class Booking(Base):
     symptoms = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    # 🚨 FIX: Pass the exact class name as a string, no importing needed!
     user = relationship("User", back_populates="bookings")
     provider = relationship("ServiceProvider", back_populates="bookings")
     doctor_service = relationship("DoctorService")
@@ -49,7 +49,8 @@ class MedicalRecord(Base):
     __table_args__ = {'extend_existing': True}
     
     record_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    booking_id = Column(String(20), ForeignKey("bookings.booking_id", ondelete="SET NULL"))
+    # 🚨 FIXED: Changed to 40
+    booking_id = Column(String(40), ForeignKey("bookings.booking_id", ondelete="SET NULL"))
     diagnosis = Column(Text)
     report_url = Column(String(500))
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -62,7 +63,8 @@ class Review(Base):
     __table_args__ = {'extend_existing': True}
     
     review_id = Column(Integer, primary_key=True, autoincrement=True)
-    booking_id = Column(String(20), ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
+    # 🚨 FIXED: Changed to 40
+    booking_id = Column(String(40), ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
     rating = Column(Integer, nullable=False)
     comment = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -75,7 +77,8 @@ class Complaint(Base):
     __table_args__ = {'extend_existing': True}
     
     complaint_id = Column(Integer, primary_key=True, autoincrement=True) 
-    booking_id = Column(String(20), ForeignKey("bookings.booking_id", ondelete="CASCADE"), nullable=False)
+    # 🚨 FIXED: Changed to 40
+    booking_id = Column(String(40), ForeignKey("bookings.booking_id", ondelete="CASCADE"), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.user_id", ondelete="CASCADE"), nullable=False)
     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
     complaint_text = Column(Text, nullable=False)
@@ -90,7 +93,8 @@ class VideoMeeting(Base):
     __table_args__ = {'extend_existing': True}
 
     meeting_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    booking_id = Column(String(20), ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
+    # 🚨 FIXED: Changed to 40
+    booking_id = Column(String(40), ForeignKey("bookings.booking_id", ondelete="CASCADE"), unique=True, nullable=False)
     room_name = Column(String(255), unique=True, nullable=False)
     host_url = Column(Text, nullable=False)
     join_url = Column(Text, nullable=False)

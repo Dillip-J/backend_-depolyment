@@ -13,7 +13,8 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from database import Base
-import models 
+# 🚨 THE FIX: Force Alembic to read all your separated model files!
+from models import users, providers, bookings, catalog 
 
 # 3. Load the .env file
 load_dotenv()
@@ -22,7 +23,7 @@ load_dotenv()
 # access to the values within the .ini file in use.
 config = context.config
 
-# 🚨 THE FIX: Override the alembic.ini url with your secure .env URL!
+# 🚨 Override the alembic.ini url with your secure .env URL!
 # Make sure "DATABASE_URL" matches exactly what you named it in your .env file
 database_url = os.getenv("DATABASE_URL")
 if database_url:
