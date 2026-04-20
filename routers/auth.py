@@ -5,7 +5,7 @@ from database import get_db
 import models, schemas
 
 # IMPORT FROM OUR CENTRAL SECURITY ENGINE
-from utils.security import verify_password, get_password_hash, create_access_token
+from utils.security import verify_password, hash_password, create_access_token
 
 router = APIRouter(prefix="/auth", tags=["Patient Authentication"])
 
@@ -21,7 +21,7 @@ def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
         )
 
     # 2. Hash the password
-    hashed_password = get_password_hash(user.password)
+    hashed_password = hash_password(user.password)
 
     # 3. Create the new user object
     new_user = models.User(
@@ -39,7 +39,7 @@ def register_patient(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 
-# --- 2. PATIENT LOGIN ROUTE (FIXED FOR REAL JSON) ---
+# --- 2. PATIENT LOGIN ROUTE ---
 @router.post("/login")
 def login(creds: schemas.UserLogin, db: Session = Depends(get_db)):
     # 1. Look up the user by email

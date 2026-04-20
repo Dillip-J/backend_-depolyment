@@ -14,4 +14,5 @@ from .users import router as users
 from .websockets import router as websockets
 from .reviews import router as reviews
 from .complaints import router as complaints
-# from .doctor_bookings import router as doctor_bookings
+from .provider_auth import router as provider_auth
+from .meet import router as meet

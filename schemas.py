@@ -33,7 +33,6 @@ class UserLogin(BaseModel):
     password: str
 
 class UserUpdate(BaseModel):
-    # Optional means they can update just the name, just the phone, or both!
     name: Optional[str] = None
     phone: Optional[str] = None
 
@@ -48,7 +47,6 @@ class ProviderCreate(BaseModel):
     longitude: Optional[float] = None
     profile_photo_url: Optional[str] = None
     license_document_url: Optional[str] = None
-    
     category: Optional[str] = "General"
     price: Optional[float] = 500.00
 
@@ -63,48 +61,67 @@ class ProviderResponse(ORMBase):
     status: str
     profile_photo_url: Optional[str] = None
 
+class ProviderProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    bio: Optional[str] = None
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
+    ifsc_code: Optional[str] = None
+
 # ==========================================
 # THE 3 DOMAINS: DOCTORS, PHARMACIES, LABS
 # ==========================================
 
 class DoctorServiceCreate(BaseModel):
     service_name: str
+    category: Optional[str] = "General"
     description: Optional[str] = None
     price: float
+    image_url: Optional[str] = None
 
     @field_validator('price')
     @classmethod
     def price_must_be_positive(cls, v):
-        if v < 0:
-            raise ValueError('Price cannot be negative.')
+        if v <= 0:
+            raise ValueError('Price cannot be zero or negative.')
         return v
 
 class DoctorServiceResponse(ORMBase):
     service_id: int
     service_name: str
     price: Decimal
+    description: Optional[str] = None
+    image_url: Optional[str] = None
 
 class MedicineCreate(BaseModel):
     medicine_name: str
     manufacturer: Optional[str] = None
     requires_prescription: bool = False
     description: Optional[str] = None
+    image_url: Optional[str] = None
 
 class MedicineResponse(ORMBase):
     medicine_id: int
     medicine_name: str
     requires_prescription: bool
+    image_url: Optional[str] = None
 
 class PharmacyInventoryCreate(BaseModel):
     medicine_id: int
     price: float
     in_stock: bool = True
+    custom_description: Optional[str] = None
+    custom_image_url: Optional[str] = None
 
 class PharmacyInventoryResponse(ORMBase):
     inventory_id: int
     price: Decimal
     in_stock: bool
     medicine: MedicineResponse 
+    custom_description: Optional[str] = None
+    custom_image_url: Optional[str] = None
 
 class LabTestCreate(BaseModel):
     test_name: str
@@ -120,23 +137,22 @@ class LabOfferingCreate(BaseModel):
     test_id: int
     price: float
     home_collection_available: bool = False
+    preparation_rules: Optional[str] = None
+    image_url: Optional[str] = None
 
 # ==========================================
 # BOOKINGS & TRANSACTIONS
 # ==========================================
 class BookingCreate(BaseModel):
     provider_id: UUID
-    
     doctor_service_id: Optional[int] = None
     medicine_id: Optional[int] = None
     lab_test_id: Optional[int] = None
-    
     scheduled_time: Optional[datetime] = None
     delivery_address: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     order_notes: Optional[str] = None
-
     patient_name: Optional[str] = None
     patient_age: Optional[int] = None
     patient_gender: Optional[str] = None
@@ -151,11 +167,10 @@ class BookingCreate(BaseModel):
         ]
         if sum(provided_services) > 1:
             raise ValueError("A booking cannot mix Doctors, Medicines, and Labs. Please select only ONE service type.")
-            
         return self
         
 class BookingResponse(ORMBase):
-    booking_id: int  # 🚨 FIXED: Now an int!
+    booking_id: int
     booking_status: str
     scheduled_time: Optional[datetime]
 
@@ -182,31 +197,31 @@ class SavedAddressResponse(ORMBase):
 # ==========================================
 
 class MedicalRecordCreate(BaseModel):
-    booking_id: int  # 🚨 FIXED: Now an int!
+    booking_id: int
     diagnosis: str
     report_url: Optional[str] = None
 
 class MedicalRecordResponse(ORMBase):
     record_id: int
-    booking_id: int  # 🚨 FIXED: Now an int!
+    booking_id: int
     diagnosis: str
     report_url: Optional[str]
 
 class ReviewCreate(BaseModel):
-    booking_id: int  # 🚨 FIXED: Now an int!
+    booking_id: int
     rating: int 
     comment: Optional[str] = None
 
 class ReviewOut(ReviewCreate, ORMBase):
-    review_id: int   # 🚨 FIXED: Now an int!
+    review_id: int
     created_at: Optional[datetime] = None
 
 class ComplaintCreate(BaseModel):
-    booking_id: int  # 🚨 FIXED: Now an int!
+    booking_id: int
     complaint_text: str
 
 class ComplaintOut(ComplaintCreate, ORMBase):
-    complaint_id: int # 🚨 FIXED: Now an int!
+    complaint_id: int
     user_id: UUID
     provider_id: UUID
     status: str
@@ -216,9 +231,17 @@ class UserOut(BaseModel):
     user_id: UUID 
     name: str
     email: str
-
     model_config = ConfigDict(from_attributes=True)
-    
+
+#==========================================
+# VIDEO MEETINGS
+#==========================================
+class VideoMeetingResponse(ORMBase):
+    booking_id: int
+    room_name: str
+    host_url: str
+    join_url: str
+    status: str
 # from pydantic import BaseModel, EmailStr, ConfigDict
 # from typing import Optional, List
 # from datetime import datetime

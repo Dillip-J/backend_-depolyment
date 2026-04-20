@@ -5,6 +5,8 @@ import shutil
 import cloudinary
 import cloudinary.uploader
 from fastapi import UploadFile
+from dotenv import load_dotenv # 🚨 ADD THIS
+load_dotenv()                  # 🚨 ADD THIS
 
 # ==========================================
 # 🚨 CLOUDINARY CONFIGURATION

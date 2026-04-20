@@ -1,21 +1,28 @@
 # routers/providers.py
-from utils.storage import storage as storage_engine
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, String
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional, Any, Dict
 from database import get_db
 import models, schemas
-from datetime import date, datetime, time
-import shutil
-import os
+from datetime import date, datetime, time, timedelta
 
 # IMPORT OUR SECURITY ENGINE & BOUNCER
-from utils.security import hash_password, verify_password, create_access_token
 from dependencies import get_current_provider 
 
 router = APIRouter(prefix="/providers", tags=["Service Providers"])
+
+# ==========================================
+# --- SECURITY MASKING FUNCTION ---
+# ==========================================
+def mask_sensitive_data(value: str, visible_chars: int = 4):
+    """Safely masks bank accounts and IFSC codes (e.g. *******1234)"""
+    if not value:
+        return "Not Provided"
+    if len(value) <= visible_chars:
+        return value
+    return "*" * (len(value) - visible_chars) + value[-visible_chars:]
 
 # ==========================================
 # --- SCHEMAS ---
@@ -30,79 +37,10 @@ class ProviderLocationUpdate(BaseModel):
 
 class BookingStatusUpdate(BaseModel):
     status: str
+    notes: Optional[str] = None 
 
 # ==========================================
-# --- 1. Registration ---
-# ==========================================
-@router.post("/register")
-async def register_provider(
-    name: str = Form(...),
-    email: str = Form(...),
-    phone: str = Form(...),
-    password: str = Form(...),
-    provider_type: str = Form(...),
-    license_number: str = Form(...),
-    category: str = Form(...),
-    latitude: float = Form(None), 
-    longitude: float = Form(None),
-    license_document: UploadFile = File(None), 
-    db: Session = Depends(get_db)
-):
-    if db.query(models.ServiceProvider).filter(models.ServiceProvider.email == email).first():
-        raise HTTPException(status_code=400, detail="Email already registered")
-
-    file_url = None
-    if license_document:
-        # 🚨 THE FIX: No more Render Time Bomb! Use Cloud Storage.
-        file_bytes = await license_document.read()
-        file_extension = license_document.filename.split(".")[-1]
-        file_url = storage_engine.upload_file(file_bytes, file_extension, folder_name="provider_licenses")
-
-    hashed_pw = hash_password(password)
-
-    new_provider = models.ServiceProvider(
-        name=name,
-        email=email,
-        phone=phone,
-        password=hashed_pw, 
-        provider_type=provider_type,
-        license_number=license_number,
-        category=category,
-        latitude=latitude, 
-        longitude=longitude,
-        license_document_url=file_url, 
-        status="approved" # Automatically approved for immediate access
-    )
-    
-    db.add(new_provider)
-    db.commit()
-    return {"message": "Application submitted and approved. You can now log in."}
-# ==========================================
-# --- 2. Login ---
-# ==========================================
-@router.post("/login")
-def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
-    provider = db.query(models.ServiceProvider).filter(models.ServiceProvider.email == creds.email).first()
-    
-    if not provider or not verify_password(creds.password, provider.password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-        
-    token = create_access_token(data={"sub": str(provider.provider_id), "role": "provider"})
-        
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "provider": {
-            "provider_id": provider.provider_id, 
-            "type": provider.provider_type, 
-            "name": provider.name,
-            "category": getattr(provider, "category", "General"),
-            "profile_photo_url": getattr(provider, "profile_photo_url", None)
-        }
-    }
-
-# ==========================================
-# --- 3. Dynamic Dashboard Data ---
+# --- 1. Dynamic Dashboard Data (Powers History & Earnings) ---
 # ==========================================
 @router.get("/dashboard/me") 
 def get_provider_dashboard(
@@ -113,6 +51,8 @@ def get_provider_dashboard(
 
     today_start = datetime.combine(date.today(), time.min)
     today_end = datetime.combine(date.today(), time.max)
+    
+    current_month_start = today_start.replace(day=1)
     
     today_count = db.query(models.Booking).filter(
         models.Booking.provider_id == provider_id,
@@ -127,38 +67,64 @@ def get_provider_dashboard(
         .all()
 
     formatted_bookings = []
-    for b in bookings:
-        service_label = "General Request"
-        if b.doctor_service_id: service_label = f"Consultation (ID: {b.doctor_service_id})"
-        if b.medicine_id: service_label = f"Medicine Order (ID: {b.medicine_id})"
-        if b.lab_test_id: service_label = f"Lab Test (ID: {b.lab_test_id})"
+    
+    lifetime_earnings = 0
+    this_month_earnings = 0
 
-        time_str = b.scheduled_time.strftime("%d %b, %H:%M") if b.scheduled_time else b.created_at.strftime("%d %b, ASAP")
+    for b in bookings:
+        v_type = "Home Visit"
+        if current_provider.provider_type == "Pharmacy":
+            v_type = "Delivery"
+        elif not b.delivery_address or str(b.delivery_address).lower() in ["none", "null", "", "platform default", "online", "undefined"]:
+            v_type = "Video Consult"
+
+        time_str = b.scheduled_time.strftime("%d %b, %I:%M %p") if b.scheduled_time else b.created_at.strftime("%d %b, ASAP")
+        short_id = str(b.booking_id).split('-')[0].upper()
+        
+        status = b.booking_status.lower() if b.booking_status else "pending"
+
+        # 🚨 THE FIX: Dynamically pull real booking price, fallback to 500 if missing
+        booking_price = float(getattr(b, "price", 500.00))
+        
+        if status == "completed":
+            lifetime_earnings += booking_price
+            if b.created_at and b.created_at >= current_month_start:
+                this_month_earnings += booking_price
 
         formatted_bookings.append({
-            "booking_id": b.booking_id,
-            "client_name": b.user.name if b.user else "Unknown Patient",
+            "booking_id": f"BKG-{short_id}",
+            "raw_id": str(b.booking_id),
+            "client_name": getattr(b, "patient_name", b.user.name if b.user else "Unknown Patient"),
             "client_phone": b.user.phone if b.user else "N/A",
-            "service_name": service_label,
+            "age": getattr(b, "patient_age", "N/A"),
+            "gender": getattr(b, "patient_gender", "N/A"),
+            "visit_type": v_type,
             "time": time_str,
-            "status": b.booking_status,
-            "address": b.delivery_address if b.delivery_address else "Not Provided",
-            "notes": b.order_notes if b.order_notes else "No additional notes",
-            "is_delivery": current_provider.provider_type == "Pharmacy"
+            "status": status,
+            "address": b.delivery_address if v_type != "Video Consult" else "Online Video Room",
+            "symptoms": getattr(b, "symptoms", getattr(b, "order_notes", "No additional notes provided.")),
+            "price": booking_price 
         })
 
     return {
         "provider_info": {
             "name": current_provider.name,
             "type": current_provider.provider_type,
-            "category": current_provider.category
+            "category": getattr(current_provider, "category", "General"),
+            "bank_account_masked": mask_sensitive_data(current_provider.account_number),
+            "ifsc_masked": mask_sensitive_data(current_provider.ifsc_code)
         },
         "total_today": today_count,
+        "financials": {
+            "lifetime_earnings": lifetime_earnings,
+            "this_month_earnings": this_month_earnings,
+            "current_month_name": date.today().strftime("%B") 
+        },
         "items": formatted_bookings
     }
 
 # ==========================================
-# --- 4. Search Records ---
+# --- 2. Search Records ---
 # ==========================================
 @router.get("/search-my-records") 
 def provider_record_search(
@@ -193,13 +159,11 @@ def provider_record_search(
         "bookings": bookings
     }
 
-
 # ==========================================
-# --- 5. PUBLIC DIRECTORY ---
+# --- 3. PUBLIC DIRECTORY ---
 # ==========================================
 @router.get("/all")
 def get_all_providers(db: Session = Depends(get_db)):
-    # 🚨 THE FIX: Changed "verified" to "approved" to match the Admin system!
     providers = db.query(models.ServiceProvider).filter(models.ServiceProvider.status == "approved").all()
     
     result = []
@@ -214,9 +178,8 @@ def get_all_providers(db: Session = Depends(get_db)):
         })
     return result
 
-
 # ==========================================
-# --- 6. PROVIDER SAVES SCHEDULE ---
+# --- 4. PROVIDER SAVES SCHEDULE ---
 # ==========================================
 @router.post("/schedule")
 def update_provider_schedule(
@@ -241,7 +204,24 @@ def update_provider_schedule(
     return {"message": f"Successfully saved {len(data.slots)} slots for {data.day}"}
 
 # ==========================================
-# --- 7. UPDATE CLINIC GPS LOCATION ---
+# --- 5. PROVIDER FETCHES OWN SCHEDULE ---
+# ==========================================
+@router.get("/schedule/{day}")
+def get_provider_schedule(
+    day: str, 
+    db: Session = Depends(get_db), 
+    current_provider: models.ServiceProvider = Depends(get_current_provider) 
+):
+    availabilities = db.query(models.ProviderAvailability).filter(
+        models.ProviderAvailability.provider_id == current_provider.provider_id,
+        models.ProviderAvailability.day_of_week == day
+    ).all()
+    
+    saved_slots = [a.time_slot for a in availabilities]
+    return {"slots": saved_slots}
+
+# ==========================================
+# --- 6. UPDATE CLINIC GPS LOCATION ---
 # ==========================================
 @router.patch("/me/location")
 def update_provider_location(
@@ -255,47 +235,53 @@ def update_provider_location(
     
     return {"message": "Clinic GPS location updated successfully."}
 
-
 # ==========================================
-# --- 8. PATIENT FETCHES SLOTS ---
+# --- 7. PATIENT FETCHES SLOTS ---
 # ==========================================
 @router.get("/{provider_id}/available-slots")
-def get_available_slots(provider_id: str, date: str = Query(...), db: Session = Depends(get_db)):
+def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_db)):
     try:
-        target_date = datetime.strptime(date, "%Y-%m-%d")
-        day_name = target_date.strftime("%A") 
+        start_of_day = datetime.strptime(date, "%Y-%m-%d")
+        day_name = start_of_day.strftime("%A") 
+        end_of_day = start_of_day + timedelta(days=1)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        raise HTTPException(status_code=400, detail="Invalid date format.")
 
-    standard_slots = db.query(models.ProviderAvailability.time_slot).filter(
+    availabilities = db.query(models.ProviderAvailability).filter(
         models.ProviderAvailability.provider_id == provider_id,
         models.ProviderAvailability.day_of_week == day_name
     ).all()
-    
-    all_slots = [slot[0] for slot in standard_slots]
 
-    if not all_slots:
-        return [] 
+    provider_slots = [a.time_slot for a in availabilities]
 
-    start_of_day = datetime.combine(target_date.date(), time.min)
-    end_of_day = datetime.combine(target_date.date(), time.max)
+    if not provider_slots:
+        provider_slots = [
+            "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", 
+            "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
+        ]
 
-    bookings = db.query(models.Booking.scheduled_time).filter(
+    existing_bookings = db.query(models.Booking).filter(
         models.Booking.provider_id == provider_id,
         models.Booking.scheduled_time >= start_of_day,
-        models.Booking.scheduled_time <= end_of_day,
+        models.Booking.scheduled_time < end_of_day,
         models.Booking.booking_status.in_(["pending", "confirmed"]) 
     ).all()
 
-    booked_slots = [b[0].strftime("%I:%M %p") for b in bookings if b[0]]
+    taken_times = []
+    for b in existing_bookings:
+        if b.scheduled_time:
+            taken_times.append(b.scheduled_time.strftime("%I:%M %p"))
 
-    available_slots = [s for s in all_slots if s not in booked_slots]
-    
-    return available_slots
+    final_available_slots = []
+    for slot in provider_slots:
+        formatted_slot = slot.replace("0", "", 1) if slot.startswith("0") else slot
+        if slot not in taken_times and formatted_slot not in taken_times:
+            final_available_slots.append(slot)
 
+    return final_available_slots
 
 # ==========================================
-# --- 9. ACCEPT / REJECT STATUS UPDATE ---
+# --- 8. COMPLETION & STATUS UPDATE ---
 # ==========================================
 @router.patch("/bookings/{booking_id}/status")
 def update_provider_booking_status(
@@ -313,182 +299,108 @@ def update_provider_booking_status(
         raise HTTPException(status_code=404, detail="Booking not found")
 
     booking.booking_status = data.status
+    
+    if data.notes:
+        booking.symptoms = data.notes 
+
     db.commit()
     
-    return {"message": f"Status updated to {data.status}"} 
-# from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
-# from sqlalchemy.orm import Session, joinedload
-# from sqlalchemy import or_, String
-# from database import get_db
-# import models, schemas
-# from datetime import date, datetime, time
-# import shutil
-# import os
+    return {"message": f"Status updated to {data.status}"}
 
-# # IMPORT OUR SECURITY ENGINE & BOUNCER
-# from utils.security import hash_password, verify_password, create_access_token
-# from dependencies import get_current_provider 
-
-# router = APIRouter(prefix="/providers", tags=["Service Providers"])
-
-# # --- 1. Registration (WITH FILE UPLOAD FIX) ---
-# @router.post("/register")
-# async def register_provider(
-#     name: str = Form(...),
-#     email: str = Form(...),
-#     phone: str = Form(...),
-#     password: str = Form(...),
-#     provider_type: str = Form(...),
-#     license_number: str = Form(...),
-#     category: str = Form(...),
-#     license_document: UploadFile = File(None), # Accepts the actual PDF file!
-#     db: Session = Depends(get_db)
-# ):
-#     # Check if email exists
-#     if db.query(models.ServiceProvider).filter(models.ServiceProvider.email == email).first():
-#         raise HTTPException(status_code=400, detail="Email already registered")
-
-#     # Save the file to the server if it exists
-#     file_url = None
-#     if license_document:
-#         os.makedirs("uploads", exist_ok=True)
-#         file_path = f"uploads/{license_document.filename}"
-#         with open(file_path, "wb") as buffer:
-#             shutil.copyfileobj(license_document.file, buffer)
-#         file_url = f"/{file_path}" # e.g., /uploads/my_license.pdf
-
-#     # Hash the password
-#     hashed_pw = hash_password(password)
-
-#     # Save to database
-#     new_provider = models.ServiceProvider(
-#         name=name,
-#         email=email,
-#         phone=phone,
-#         password=hashed_pw, # Mapped to correct DB column
-#         provider_type=provider_type,
-#         license_number=license_number,
-#         category=category,
-#         license_document_url=file_url, # Now it saves the actual path, not null!
-#         status="pending"
-#     )
+# ==========================================
+# --- 9. MULTI-PROVIDER CATALOG ROUTING ---
+# ==========================================
+@router.post("/services")
+def add_provider_service(
+    data: Dict[str, Any], # 🚨 THE FIX: Safe Pydantic parsing!
+    db: Session = Depends(get_db), 
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
+):
+    ptype = current_provider.provider_type
     
-#     db.add(new_provider)
-#     db.commit()
-#     return {"message": "Application submitted. Awaiting Admin approval."}
-
-# # --- 2. Login (Specific to Providers) ---
-# @router.post("/login")
-# def login_provider(creds: schemas.ProviderLogin, db: Session = Depends(get_db)):
-#     provider = db.query(models.ServiceProvider).filter(models.ServiceProvider.email == creds.email).first()
+    if ptype == 'Doctor':
+        validated_data = schemas.DoctorServiceCreate(**data).dict()
+        new_item = models.DoctorService(provider_id=current_provider.provider_id, **validated_data)
+        db.add(new_item)
     
-#     # SECURITY FIX: Verify Hash
-#     if not provider or not verify_password(creds.password, provider.password):
-#         raise HTTPException(status_code=401, detail="Invalid credentials")
+    elif ptype == 'Pharmacy':
+        med_data = schemas.MedicineCreate(**data).dict()
+        new_med = models.Medicine(**med_data)
+        db.add(new_med)
+        db.flush() 
         
-#     if provider.status == "pending":
-#         raise HTTPException(status_code=403, detail="Account pending admin approval")
+        new_item = models.PharmacyInventory(
+            provider_id=current_provider.provider_id,
+            medicine_id=new_med.medicine_id,
+            price=data.get("price", 0),
+            in_stock=True
+        )
+        db.add(new_item)
         
-#     # GENERATE TOKEN
-#     token = create_access_token(data={"sub": str(provider.provider_id), "role": "provider"})
+    elif ptype == 'Lab':
+        test_data = schemas.LabTestCreate(**data).dict()
+        new_test = models.LabTest(**test_data)
+        db.add(new_test)
+        db.flush() 
         
-#     return {
-#         "access_token": token,
-#         "token_type": "bearer",
-#         "provider": {
-#             "provider_id": provider.provider_id, 
-#             "type": provider.provider_type, 
-#             "name": provider.name,
-#             # 🚨 THE FIX: Use getattr to prevent the crash if the column is missing!
-#             "category": getattr(provider, "category", "General"),
-#             "profile_photo_url": getattr(provider, "profile_photo_url", None)
-#         }
-#     }
+        new_item = models.LabOffering(
+            provider_id=current_provider.provider_id,
+            test_id=new_test.test_id,
+            price=data.get("price", 0),
+            home_collection_available=data.get("home_collection_available", False)
+        )
+        db.add(new_item)
+        
+    else:
+        raise HTTPException(status_code=400, detail="Invalid provider type")
 
-# # --- 3. Dynamic Dashboard Data (SECURED) ---
-# @router.get("/dashboard/me") 
-# def get_provider_dashboard(
-#     db: Session = Depends(get_db),
-#     current_provider: models.ServiceProvider = Depends(get_current_provider) 
-# ):
-#     provider_id = current_provider.provider_id
+    db.commit()
+    return {"message": "Service successfully added to catalog!"}
 
-#     today_start = datetime.combine(date.today(), time.min)
-#     today_end = datetime.combine(date.today(), time.max)
+@router.get("/services/me")
+def get_my_services(
+    db: Session = Depends(get_db), 
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
+):
+    ptype = current_provider.provider_type
     
-#     today_count = db.query(models.Booking).filter(
-#         models.Booking.provider_id == provider_id,
-#         models.Booking.scheduled_time >= today_start,
-#         models.Booking.scheduled_time <= today_end
-#     ).count()
+    if ptype == 'Doctor':
+        return db.query(models.DoctorService).filter(models.DoctorService.provider_id == current_provider.provider_id).all()
+    elif ptype == 'Pharmacy':
+        return db.query(models.PharmacyInventory).options(joinedload(models.PharmacyInventory.medicine)).filter(models.PharmacyInventory.provider_id == current_provider.provider_id).all()
+    elif ptype == 'Lab':
+        return db.query(models.LabOffering).options(joinedload(models.LabOffering.test)).filter(models.LabOffering.provider_id == current_provider.provider_id).all()
+    
+    return []
 
-#     bookings = db.query(models.Booking)\
-#         .options(joinedload(models.Booking.user))\
-#         .filter(models.Booking.provider_id == provider_id)\
-#         .order_by(models.Booking.created_at.desc())\
-#         .all()
-
-#     formatted_bookings = []
-#     for b in bookings:
-#         service_label = "General Request"
-#         if b.doctor_service_id: service_label = f"Consultation (ID: {b.doctor_service_id})"
-#         if b.medicine_id: service_label = f"Medicine Order (ID: {b.medicine_id})"
-#         if b.lab_test_id: service_label = f"Lab Test (ID: {b.lab_test_id})"
-
-#         time_str = b.scheduled_time.strftime("%d %b, %H:%M") if b.scheduled_time else b.created_at.strftime("%d %b, ASAP")
-
-#         formatted_bookings.append({
-#             "booking_id": b.booking_id,
-#             "client_name": b.user.name if b.user else "Unknown Patient",
-#             "client_phone": b.user.phone if b.user else "N/A",
-#             "service_name": service_label,
-#             "time": time_str,
-#             "status": b.booking_status,
-#             "address": b.delivery_address if b.delivery_address else "Not Provided",
-#             "notes": b.order_notes if b.order_notes else "No additional notes",
-#             "is_delivery": current_provider.provider_type == "Pharmacy"
-#         })
-
-#     return {
-#         "provider_info": {
-#             "name": current_provider.name,
-#             "type": current_provider.provider_type,
-#             "category": current_provider.category
-#         },
-#         "total_today": today_count,
-#         "items": formatted_bookings
-#     }
-
-# # --- 4. Search Records (SECURED) ---
-# @router.get("/search-my-records") 
-# def provider_record_search(
-#     q: str, 
-#     db: Session = Depends(get_db),
-#     current_provider: models.ServiceProvider = Depends(get_current_provider) 
-# ):
-#     if len(q) < 2:
-#         return {"patients": [], "bookings": []}
-
-#     search_term = f"%{q}%"
-#     provider_id = current_provider.provider_id
-
-#     patients = db.query(models.User).join(models.Booking).filter(
-#         models.Booking.provider_id == provider_id,
-#         or_(
-#             models.User.name.ilike(search_term),
-#             models.User.phone.ilike(search_term)
-#         )
-#     ).distinct().all()
-
-#     bookings = db.query(models.Booking).filter(
-#         models.Booking.provider_id == provider_id,
-#         or_(
-#             models.Booking.booking_id.cast(String).ilike(search_term),
-#             models.Booking.order_notes.ilike(search_term)
-#         )
-#     ).limit(10).all()
-
-#     return {
-#         "patients": patients,
-#         "bookings": bookings
-#     }
+# ==========================================
+# --- 10. UPDATE PROFILE & BANK DETAILS ---
+# ==========================================
+@router.patch("/me")
+def update_provider_profile(
+    data: schemas.ProviderProfileUpdate,
+    db: Session = Depends(get_db),
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
+):
+    """Updates the provider's Name, Detailed Bio, and Bank Info"""
+    update_data = data.dict(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        setattr(current_provider, key, value)
+    
+    db.commit()
+    db.refresh(current_provider)
+    
+    return {
+        "message": "Profile updated successfully!",
+        "provider": {
+            "name": current_provider.name,
+            "phone": current_provider.phone,
+            "address": current_provider.address,
+            "bio": current_provider.bio,
+            "bank_name": current_provider.bank_name,
+            "account_number": current_provider.account_number,
+            "ifsc_code": current_provider.ifsc_code,
+            "profile_photo_url": current_provider.profile_photo_url
+        }
+    }

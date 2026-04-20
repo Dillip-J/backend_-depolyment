@@ -1,7 +1,7 @@
 # routers/home.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import or_  # 🚨 FIX: Imported or_ to handle ASAP bookings
+from sqlalchemy import or_ 
 from database import get_db
 import models
 from datetime import datetime
@@ -48,12 +48,11 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
         active_booking = db.query(models.Booking).filter(
             models.Booking.user_id == user_id, 
             models.Booking.booking_status == 'confirmed',
-            # 🚨 FIX: Safely handles scheduled times OR ASAP (null) times!
             or_(
                 models.Booking.scheduled_time > datetime.utcnow(),
                 models.Booking.scheduled_time == None
             )
-        ).order_by(models.Booking.created_at.asc()).first() # 🚨 FIX: Ordered by creation time so NULLs don't crash
+        ).order_by(models.Booking.created_at.asc()).first() 
         
         if active_booking:
             provider = db.query(models.ServiceProvider).filter(
@@ -73,7 +72,7 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
                 "id": str(f.provider_id),
                 "name": f.name,
                 "type": f.provider_type,
-                "photo": f.profile_photo_url
+                "photo": getattr(f, "profile_photo_url", None)
             } for f in featured
         ],
         "active_booking": active
@@ -103,7 +102,10 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
             "name": p.name,
             "provider_type": p.provider_type,
             "category": getattr(p, 'category', 'General'), 
-            "profile_photo_url": p.profile_photo_url,
+            
+            # 🚨 THE PHOTO FIX IS SAFELY APPLIED HERE:
+            "profile_photo_url": getattr(p, "profile_photo_url", None),
+            
             "distance_km": round(dist, 1) if is_valid_dist else "Unknown",
             
             # Base Doctor/Lab Pricing (Defaults)
