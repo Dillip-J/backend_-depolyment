@@ -13,23 +13,20 @@ models.Base.metadata.create_all(bind=engine)
  
 app = FastAPI(title="V Healthcare API")
 
-# 🚨 THE FIX 1: Turn on CORS so your frontend is legally allowed to talk to your backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allows your Live Server to connect
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 🚨 THE FIX 2: Unlock the uploads folder so the browser can actually see the photos!
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+@app.get("/")
+def root():
+    return {"status": "V Healthcare API is Online"}
+ 
 
-@app.get("/favicon.ico", include_in_schema=False)
-async def favicon():
-    return Response(content="", media_type="image/x-icon", status_code=204)
-
-# (Make sure all your app.include_router(...) lines stay down here!)
+ 
 
 # Connect Routers
 app.include_router(auth)
@@ -49,7 +46,3 @@ app.include_router(reviews)
 app.include_router(complaints)
 app.include_router(feedback)
 app.include_router(meet)
-
-@app.get("/")
-def root():
-    return {"status": "V Healthcare API is Online"}
