@@ -239,7 +239,7 @@ def update_provider_location(
 # ==========================================
 # --- 7. PATIENT FETCHES SLOTS ---
 # ==========================================
-@router.get("/providers/{provider_id}/available-slots")
+@router.get("/{provider_id}/available-slots")
 def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_db)):
     target_date = datetime.strptime(date, "%Y-%m-%d")
     day_name = target_date.strftime("%A")
