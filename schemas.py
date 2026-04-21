@@ -48,7 +48,7 @@ class ProviderCreate(BaseModel):
     profile_photo_url: Optional[str] = None
     license_document_url: Optional[str] = None
     category: Optional[str] = "General"
-    price: Optional[float] = 500.00
+    price: Optional[float] = None
 
 class ProviderLogin(BaseModel):
     email: EmailStr
@@ -239,4 +239,15 @@ class VideoMeetingResponse(ORMBase):
     host_url: str
     join_url: str
     status: str
- 
+class ScheduleUpdate(BaseModel):
+    day: str
+    slots: List[str]
+
+class ProviderLocationUpdate(BaseModel):
+    latitude: float
+    longitude: float
+
+class BookingStatusUpdate(BaseModel):
+    status: str
+    notes: Optional[str] = None
+    report_url: Optional[str] = None 

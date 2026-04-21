@@ -12,7 +12,8 @@ from routers import auth, booking, home, records, support, services, admin, admi
 models.Base.metadata.create_all(bind=engine)
  
 app = FastAPI(title="V Healthcare API")
-
+# This tells FastAPI to allow the browser to see files in the 'uploads' folder
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  

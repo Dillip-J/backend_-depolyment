@@ -38,6 +38,7 @@ class ProviderLocationUpdate(BaseModel):
 class BookingStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None 
+    report_url: Optional[str] = None # 🚨 ADDED FOR FILE UPLOADS
 
 # ==========================================
 # --- 1. Dynamic Dashboard Data (Powers History & Earnings) ---
@@ -83,7 +84,6 @@ def get_provider_dashboard(
         
         status = b.booking_status.lower() if b.booking_status else "pending"
 
-        # 🚨 THE FIX: Dynamically pull real booking price, fallback to 500 if missing
         booking_price = float(getattr(b, "price", 500.00))
         
         if status == "completed":
@@ -103,7 +103,8 @@ def get_provider_dashboard(
             "status": status,
             "address": b.delivery_address if v_type != "Video Consult" else "Online Video Room",
             "symptoms": getattr(b, "symptoms", getattr(b, "order_notes", "No additional notes provided.")),
-            "price": booking_price 
+            "price": booking_price,
+            "report_url": getattr(b, "report_url", None) # 🚨 INJECTED REPORT URL
         })
 
     return {
@@ -238,47 +239,51 @@ def update_provider_location(
 # ==========================================
 # --- 7. PATIENT FETCHES SLOTS ---
 # ==========================================
-@router.get("/{provider_id}/available-slots")
+@router.get("/providers/{provider_id}/available-slots")
 def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_db)):
-    try:
-        start_of_day = datetime.strptime(date, "%Y-%m-%d")
-        day_name = start_of_day.strftime("%A") 
-        end_of_day = start_of_day + timedelta(days=1)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format.")
-
-    availabilities = db.query(models.ProviderAvailability).filter(
+    target_date = datetime.strptime(date, "%Y-%m-%d")
+    day_name = target_date.strftime("%A")
+    
+    schedule = db.query(models.ProviderAvailability).filter(
         models.ProviderAvailability.provider_id == provider_id,
         models.ProviderAvailability.day_of_week == day_name
     ).all()
+    
+    if not schedule:
+        return []
+        
+    base_available_times = [s.time_slot for s in schedule] 
 
-    provider_slots = [a.time_slot for a in availabilities]
-
-    if not provider_slots:
-        provider_slots = [
-            "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", 
-            "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"
-        ]
-
-    existing_bookings = db.query(models.Booking).filter(
+    active_bookings = db.query(models.Booking).filter(
         models.Booking.provider_id == provider_id,
-        models.Booking.scheduled_time >= start_of_day,
-        models.Booking.scheduled_time < end_of_day,
-        models.Booking.booking_status.in_(["pending", "confirmed"]) 
+        models.Booking.booking_status.in_(['pending', 'confirmed'])
     ).all()
 
-    taken_times = []
-    for b in existing_bookings:
-        if b.scheduled_time:
-            taken_times.append(b.scheduled_time.strftime("%I:%M %p"))
+    booked_time_strings = []
+    for b in active_bookings:
+        if b.scheduled_time and b.scheduled_time.date() == target_date.date():
+            booked_time_strings.append(b.scheduled_time.strftime("%I:%M %p"))
 
-    final_available_slots = []
-    for slot in provider_slots:
-        formatted_slot = slot.replace("0", "", 1) if slot.startswith("0") else slot
-        if slot not in taken_times and formatted_slot not in taken_times:
-            final_available_slots.append(slot)
+    extended_blocks = set()
+    for booked_time in booked_time_strings:
+        try:
+            bt = datetime.strptime(booked_time, "%I:%M %p")
+            extended_blocks.add(bt.strftime("%I:%M %p"))
+            extended_blocks.add((bt + timedelta(minutes=30)).strftime("%I:%M %p"))
+            extended_blocks.add((bt - timedelta(minutes=30)).strftime("%I:%M %p"))
+        except ValueError:
+            pass
 
-    return final_available_slots
+    final_slots = []
+    for slot in base_available_times:
+        try:
+            clean_slot = datetime.strptime(slot, "%I:%M %p").strftime("%I:%M %p")
+            if clean_slot not in extended_blocks:
+                final_slots.append(clean_slot)
+        except ValueError:
+            pass
+
+    return final_slots
 
 # ==========================================
 # --- 8. COMPLETION & STATUS UPDATE ---
@@ -303,6 +308,10 @@ def update_provider_booking_status(
     if data.notes:
         booking.symptoms = data.notes 
 
+    # 🚨 THE FIX: Save the file link to the database
+    if getattr(data, "report_url", None):
+        booking.report_url = data.report_url 
+
     db.commit()
     
     return {"message": f"Status updated to {data.status}"}
@@ -312,7 +321,7 @@ def update_provider_booking_status(
 # ==========================================
 @router.post("/services")
 def add_provider_service(
-    data: Dict[str, Any], # 🚨 THE FIX: Safe Pydantic parsing!
+    data: Dict[str, Any], 
     db: Session = Depends(get_db), 
     current_provider: models.ServiceProvider = Depends(get_current_provider)
 ):
@@ -372,6 +381,42 @@ def get_my_services(
         return db.query(models.LabOffering).options(joinedload(models.LabOffering.test)).filter(models.LabOffering.provider_id == current_provider.provider_id).all()
     
     return []
+
+@router.delete("/services/{item_id}")
+def delete_catalog_item(
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_provider: models.ServiceProvider = Depends(get_current_provider)
+):
+    ptype = current_provider.provider_type
+    deleted = False
+
+    if ptype == 'Doctor':
+        deleted_count = db.query(models.DoctorService).filter(
+            models.DoctorService.service_id == item_id, 
+            models.DoctorService.provider_id == current_provider.provider_id
+        ).delete()
+        if deleted_count > 0: deleted = True
+
+    elif ptype == 'Pharmacy':
+        deleted_count = db.query(models.PharmacyInventory).filter(
+            models.PharmacyInventory.inventory_id == item_id, 
+            models.PharmacyInventory.provider_id == current_provider.provider_id
+        ).delete()
+        if deleted_count > 0: deleted = True
+
+    elif ptype == 'Lab':
+        deleted_count = db.query(models.LabOffering).filter(
+            models.LabOffering.offering_id == item_id, 
+            models.LabOffering.provider_id == current_provider.provider_id
+        ).delete()
+        if deleted_count > 0: deleted = True
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Service not found or already deleted.")
+
+    db.commit()
+    return {"message": "Service deleted successfully from catalog."}
 
 # ==========================================
 # --- 10. UPDATE PROFILE & BANK DETAILS ---
