@@ -261,12 +261,18 @@ def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_d
         models.Booking.booking_status.in_(['pending', 'confirmed'])
     ).all()
 
-    # 3. Create a strict blocklist based ONLY on the exact booked times
+    # 3. Create a strict blocklist based on booked times
     booked_time_strings = set()
     for b in active_bookings:
         if b.scheduled_time and b.scheduled_time.date() == target_date.date():
-            # Format to exactly match the "09:00 AM" format in the database
+            # Block the exact time booked (e.g., 09:00 AM)
             booked_time_strings.add(b.scheduled_time.strftime("%I:%M %p"))
+            
+            # 🚨 THE OVERLAP SHADOW BLOCK 
+            # Automatically block the slot 30 minutes after (e.g., 09:30 AM)
+            # This ensures every appointment reserves a full 1-Hour window!
+            plus_30_mins = b.scheduled_time + timedelta(minutes=30)
+            booked_time_strings.add(plus_30_mins.strftime("%I:%M %p"))
 
     # 4. Filter the base times against the blocklist
     final_slots = []
