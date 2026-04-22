@@ -244,6 +244,7 @@ def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_d
     target_date = datetime.strptime(date, "%Y-%m-%d")
     day_name = target_date.strftime("%A")
     
+    # 1. Get EXACT slots saved by the provider for this day
     schedule = db.query(models.ProviderAvailability).filter(
         models.ProviderAvailability.provider_id == provider_id,
         models.ProviderAvailability.day_of_week == day_name
@@ -254,31 +255,26 @@ def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_d
         
     base_available_times = [s.time_slot for s in schedule] 
 
+    # 2. Get active bookings for this specific date
     active_bookings = db.query(models.Booking).filter(
         models.Booking.provider_id == provider_id,
         models.Booking.booking_status.in_(['pending', 'confirmed'])
     ).all()
 
-    booked_time_strings = []
+    # 3. Create a strict blocklist based ONLY on the exact booked times
+    booked_time_strings = set()
     for b in active_bookings:
         if b.scheduled_time and b.scheduled_time.date() == target_date.date():
-            booked_time_strings.append(b.scheduled_time.strftime("%I:%M %p"))
+            # Format to exactly match the "09:00 AM" format in the database
+            booked_time_strings.add(b.scheduled_time.strftime("%I:%M %p"))
 
-    extended_blocks = set()
-    for booked_time in booked_time_strings:
-        try:
-            bt = datetime.strptime(booked_time, "%I:%M %p")
-            extended_blocks.add(bt.strftime("%I:%M %p"))
-            extended_blocks.add((bt + timedelta(minutes=30)).strftime("%I:%M %p"))
-            extended_blocks.add((bt - timedelta(minutes=30)).strftime("%I:%M %p"))
-        except ValueError:
-            pass
-
+    # 4. Filter the base times against the blocklist
     final_slots = []
     for slot in base_available_times:
         try:
+            # Ensure strict formatting comparison
             clean_slot = datetime.strptime(slot, "%I:%M %p").strftime("%I:%M %p")
-            if clean_slot not in extended_blocks:
+            if clean_slot not in booked_time_strings:
                 final_slots.append(clean_slot)
         except ValueError:
             pass
