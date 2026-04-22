@@ -236,56 +236,120 @@ def update_provider_location(
     
     return {"message": "Clinic GPS location updated successfully."}
 
-# ==========================================
-# --- 7. PATIENT FETCHES SLOTS ---
-# ==========================================
-@router.get("/{provider_id}/available-slots")
-def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_db)):
-    target_date = datetime.strptime(date, "%Y-%m-%d")
-    day_name = target_date.strftime("%A")
-    
-    # 1. Get EXACT slots saved by the provider for this day
-    schedule = db.query(models.ProviderAvailability).filter(
-        models.ProviderAvailability.provider_id == provider_id,
-        models.ProviderAvailability.day_of_week == day_name
-    ).all()
-    
-    if not schedule:
-        return []
-        
-    base_available_times = [s.time_slot for s in schedule] 
+// =========================================================================
+    // --- 7. SCHEDULE MANAGER LOGIC (THE "STATE-DRIVEN" FIX) ---
+    // Memory-based slot saving to prevent hidden slots from being deleted.
+    // =========================================================================
+    async function loadScheduleManager() {
+        if (providerType === 'Pharmacy') return;
 
-    # 2. Get active bookings for this specific date
-    active_bookings = db.query(models.Booking).filter(
-        models.Booking.provider_id == provider_id,
-        models.Booking.booking_status.in_(['pending', 'confirmed'])
-    ).all()
+        const dateCon = document.getElementById('provider-date-container');
+        const timeCon = document.getElementById('provider-time-container');
+        if (!dateCon || !timeCon) return;
 
-    # 3. Create a strict blocklist based on booked times
-    booked_time_strings = set()
-    for b in active_bookings:
-        if b.scheduled_time and b.scheduled_time.date() == target_date.date():
-            # Block the exact time booked (e.g., 09:00 AM)
-            booked_time_strings.add(b.scheduled_time.strftime("%I:%M %p"))
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        dateCon.innerHTML = days.map(d => `<button class="btn-day-select" data-day="${d}">${d}</button>`).join('');
+
+        const renderTimes = async (day) => {
+            timeCon.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;">Loading slots...</div>';
             
-            # 🚨 THE OVERLAP SHADOW BLOCK 
-            # Automatically block the slot 30 minutes after (e.g., 09:30 AM)
-            # This ensures every appointment reserves a full 1-Hour window!
-            plus_30_mins = b.scheduled_time + timedelta(minutes=30)
-            booked_time_strings.add(plus_30_mins.strftime("%I:%M %p"))
+            // 🚨 TRUE SOURCE OF TRUTH: Fetch exact DB array into memory
+            let currentSavedSlots = [];
+            try {
+                const res = await fetch(`${API_BASE}/providers/schedule/${day}`, { headers: { 'Authorization': `Bearer ${token}` } });
+                if(res.ok) { const data = await res.json(); currentSavedSlots = data.slots || []; }
+            } catch (err) {}
 
-    # 4. Filter the base times against the blocklist
-    final_slots = []
-    for slot in base_available_times:
-        try:
-            # Ensure strict formatting comparison
-            clean_slot = datetime.strptime(slot, "%I:%M %p").strftime("%I:%M %p")
-            if clean_slot not in booked_time_strings:
-                final_slots.append(clean_slot)
-        except ValueError:
-            pass
+            const drawGrid = () => {
+                const durationSelect = document.getElementById('slot-duration-select');
+                const duration = durationSelect ? parseInt(durationSelect.value) : 60;
+                
+                const times = [];
+                for (let h = 9; h <= 17; h++) {
+                    for (let m = 0; m < 60; m += duration) {
+                        if (h === 17 && m > 0) break; 
+                        let hr = h > 12 ? h - 12 : (h === 0 ? 12 : h);
+                        const timeString = `${hr < 10 ? '0'+hr : hr}:${m === 0 ? '00' : m} ${h >= 12 ? 'PM' : 'AM'}`;
+                        times.push(timeString);
+                    }
+                }
 
-    return final_slots
+                timeCon.innerHTML = times.map(t => {
+                    let isAvail = false;
+                    if (duration === 60) {
+                        // In 1-Hour view, a slot is ONLY Green if BOTH 30-min chunks exist in memory
+                        const halfHour = t.replace(':00', ':30');
+                        isAvail = currentSavedSlots.includes(t) && currentSavedSlots.includes(halfHour);
+                    } else {
+                        // In 30-Min view, it's just a direct check
+                        isAvail = currentSavedSlots.includes(t);
+                    }
+
+                    return `<button class="btn-time-slot ${isAvail ? 'available' : ''}" data-time="${t}">
+                                ${isAvail ? '<i class="fa-solid fa-check-circle"></i>' : '<i class="fa-solid fa-ban"></i>'} ${t}
+                            </button>`;
+                }).join('');
+
+                timeCon.querySelectorAll('.btn-time-slot').forEach(btn => {
+                    btn.addEventListener('click', async function() {
+                        const clickedTime = this.getAttribute('data-time');
+                        const isCurrentlyAvail = this.classList.contains('available');
+                        const turningOn = !isCurrentlyAvail;
+                        
+                        // 🚨 SMART MEMORY: Update the array logically without looking at the screen!
+                        if (duration === 60) {
+                            const halfHour = clickedTime.replace(':00', ':30');
+                            if (turningOn) {
+                                if (!currentSavedSlots.includes(clickedTime)) currentSavedSlots.push(clickedTime);
+                                if (!currentSavedSlots.includes(halfHour)) currentSavedSlots.push(halfHour);
+                            } else {
+                                currentSavedSlots = currentSavedSlots.filter(s => s !== clickedTime && s !== halfHour);
+                            }
+                        } else {
+                            if (turningOn) {
+                                if (!currentSavedSlots.includes(clickedTime)) currentSavedSlots.push(clickedTime);
+                            } else {
+                                currentSavedSlots = currentSavedSlots.filter(s => s !== clickedTime);
+                            }
+                        }
+                        
+                        // Visually update the UI instantly
+                        drawGrid();
+                        
+                        // Save the full memory array to the database silently
+                        try {
+                            await fetch(`${API_BASE}/providers/schedule`, { 
+                                method: 'POST', 
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, 
+                                body: JSON.stringify({ day: day, slots: currentSavedSlots }) 
+                            });
+                        } catch (e) {
+                            console.error("Sync error");
+                        }
+                    });
+                });
+            };
+
+            // Draw the grid for the first time
+            drawGrid();
+        };
+
+        let activeDay = 'Monday';
+        const dayBtns = dateCon.querySelectorAll('.btn-day-select');
+        dayBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                dayBtns.forEach(b => b.classList.remove('active'));
+                e.currentTarget.classList.add('active');
+                activeDay = e.currentTarget.getAttribute('data-day');
+                renderTimes(activeDay);
+            });
+        });
+
+        const durSelect = document.getElementById('slot-duration-select');
+        if(durSelect) durSelect.addEventListener('change', () => renderTimes(activeDay));
+        
+        if(dayBtns.length > 0) { dayBtns[0].classList.add('active'); renderTimes('Monday'); }
+    }
 
 # ==========================================
 # --- 8. COMPLETION & STATUS UPDATE ---
