@@ -103,6 +103,12 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
             "provider_type": p.provider_type,
             "category": getattr(p, 'category', 'General'), 
             
+            # 🚨 THE MISSING DATA FIX: Attach Bio, Phone, and GPS Coordinates
+            "bio": getattr(p, "bio", "No description provided by this professional."),
+            "phone": getattr(p, "phone", "Contact not available"),
+            "latitude": getattr(p, "latitude", None),
+            "longitude": getattr(p, "longitude", None),
+            
             # 🚨 THE PHOTO FIX IS SAFELY APPLIED HERE:
             "profile_photo_url": getattr(p, "profile_photo_url", None),
             
@@ -137,4 +143,3 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
     sorted_providers = [p[1] for p in provider_distances]
     
     return sorted_providers
-
