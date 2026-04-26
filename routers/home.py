@@ -1,7 +1,7 @@
 # routers/home.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import or_ 
+from sqlalchemy import or_, func
 from database import get_db
 import models
 from datetime import datetime
@@ -29,17 +29,17 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 # ==========================================
 @router.get("/")
 def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
-    # 1. Categories (What types of doctors are available?)
+    # 1. Categories (Case-insensitive fix applied)
     approved_docs = db.query(models.ServiceProvider).filter(
-        models.ServiceProvider.status == 'approved',
-        models.ServiceProvider.provider_type == 'Doctor'
+        models.ServiceProvider.status.ilike('approved'),
+        models.ServiceProvider.provider_type.ilike('doctor')
     ).all()
     
     categories = list(set([doc.category if hasattr(doc, 'category') and doc.category else 'General' for doc in approved_docs]))
 
     # 2. Featured Providers
     featured = db.query(models.ServiceProvider).filter(
-        models.ServiceProvider.status == 'approved'
+        models.ServiceProvider.status.ilike('approved')
     ).limit(6).all()
 
     # 3. Active Booking Banner
@@ -83,10 +83,10 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
 # ==========================================
 @router.get("/nearest")
 def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "Doctor", db: Session = Depends(get_db)):
-    # 1. Fetch ALL APPROVED providers of the requested category
+    # 1. Fetch ALL APPROVED providers of the requested category (Case-Insensitive Fix!)
     providers = db.query(models.ServiceProvider).filter(
-        models.ServiceProvider.provider_type == category,
-        models.ServiceProvider.status == 'approved'
+        models.ServiceProvider.provider_type.ilike(category),
+        models.ServiceProvider.status.ilike('approved')
     ).all()
 
     provider_distances = []
@@ -103,21 +103,26 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
             "provider_type": p.provider_type,
             "category": getattr(p, 'category', 'General'), 
             
-            # 🚨 THE MISSING DATA FIX: Attach Bio, Phone, and GPS Coordinates
             "bio": getattr(p, "bio", "No description provided by this professional."),
             "phone": getattr(p, "phone", "Contact not available"),
             "latitude": getattr(p, "latitude", None),
             "longitude": getattr(p, "longitude", None),
             
-            # 🚨 THE PHOTO FIX IS SAFELY APPLIED HERE:
             "profile_photo_url": getattr(p, "profile_photo_url", None),
             
             "distance_km": round(dist, 1) if is_valid_dist else "Unknown",
             
             # Base Doctor/Lab Pricing (Defaults)
-            "price": getattr(p, 'price', 500) if category == 'Doctor' else getattr(p, 'price', 45),
-            "home_visit_charge": 200,
+            "price": getattr(p, 'price', 500) if category.lower() == 'doctor' else getattr(p, 'price', 45),
+            "home_visit_charge": getattr(p, 'home_visit_charge', 200),
         }
+
+        # Safely pull catalog services if they exist
+        services = getattr(p, "doctor_services", [])
+        if services:
+            p_dict["doctor_services"] = [
+                {"service_name": s.service_name, "price": s.price} for s in services
+            ]
 
         # Dynamic ETA and Variable Delivery Pricing Logic
         if is_valid_dist:
