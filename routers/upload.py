@@ -107,3 +107,34 @@ async def upload_medical_report(
     db.commit()
 
     return {"message": "Medical report uploaded securely.", "url": final_url}
+
+@router.post("/booking/report")
+async def upload_booking_report(
+    file: UploadFile = File(...)
+):
+    # 1. Secure the file type (Only allow PDFs and Images)
+    if not file.content_type.startswith(("image/", "application/pdf")):
+        raise HTTPException(status_code=400, detail="Only images and PDFs are allowed.")
+
+    file_bytes = await file.read()
+    
+    # Safely get the extension
+    filename_parts = file.filename.split(".")
+    file_extension = filename_parts[-1] if len(filename_parts) > 1 else "pdf"
+
+    # 2. Use YOUR custom storage engine to save it
+    raw_url = storage_engine.upload_file(
+        file_bytes,
+        file_extension,
+        folder_name="uploads/reports"   # Keep it in a safe folder
+    )
+
+    final_url = format_url(raw_url)
+
+    # 3. Return both 'url' and 'file_url' to make sure the frontend catches it regardless of what key it expects
+    return {
+        "status": "Success",
+        "message": "Report uploaded successfully", 
+        "url": final_url,
+        "file_url": final_url 
+    }
