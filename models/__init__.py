@@ -9,6 +9,14 @@ from .bookings import Booking, MedicalRecord, Review, Complaint, VideoMeeting
 # catalog items to the rest of the app!
 from .catalog import Service, CatalogItem
 
+# # # models/__init__.py
+# from database import Base
+
+# from .users import User, Admin
+# # Renamed to LabOffering to prevent ImportError
+# from .providers import ServiceProvider, ProviderAvailability
+# from .bookings import Booking, VideoMeeting
+
 # from database import Base
 
 # from .users import User, SavedAddress, Admin

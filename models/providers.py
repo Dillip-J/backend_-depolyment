@@ -118,3 +118,47 @@ class LabOffering(Base):
     provider = relationship("ServiceProvider", back_populates="lab_offerings")
     lab_test = relationship("LabTest")
 # 🚨 NOTICE: CATALOG ITEM IS GONE FROM THIS FILE. IT LIVES IN CATALOG.PY NOW.
+
+# # models/providers.py
+# import uuid
+# from sqlalchemy import Column, String, Numeric, Text, ForeignKey, Integer
+# from sqlalchemy.dialects.postgresql import UUID
+# from sqlalchemy.orm import relationship
+# from database import Base
+
+# class ServiceProvider(Base):
+#     __tablename__ = "service_providers"
+#     __table_args__ = {'extend_existing': True} 
+    
+#     provider_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+#     provider_type = Column(String(50), nullable=False, default='Doctor') 
+#     name = Column(String(255), nullable=False)
+#     category = Column(String(100), nullable=True) 
+#     consultation_fee = Column(Numeric(10, 2), default=500.00) 
+#     email = Column(String(255), unique=True, index=True, nullable=False)
+#     password = Column(String(255), nullable=False)
+#     phone = Column(String(20))
+#     address = Column(Text)
+#     latitude = Column(Numeric(10, 8))
+#     longitude = Column(Numeric(11, 8))
+#     status = Column(String(50), default='pending')
+#     profile_photo_url = Column(String(500))
+#     bio = Column(Text, nullable=True) 
+#     bank_name = Column(String(100), nullable=True)
+#     account_number = Column(String(50), nullable=True)
+#     ifsc_code = Column(String(20), nullable=True)
+
+#     bookings = relationship("Booking", back_populates="provider", cascade="all, delete")
+#     availabilities = relationship("ProviderAvailability", back_populates="provider", cascade="all, delete")
+
+
+# class ProviderAvailability(Base):
+#     __tablename__ = "provider_availability"
+#     __table_args__ = {'extend_existing': True}
+    
+#     id = Column(Integer, primary_key=True, index=True)
+#     provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"))
+#     day_of_week = Column(String) 
+#     time_slot = Column(String)  
+    
+#     provider = relationship("ServiceProvider", back_populates="availabilities")
