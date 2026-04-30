@@ -170,7 +170,8 @@ class BookingCreate(BaseModel):
         return self
         
 class BookingResponse(ORMBase):
-    booking_id: int
+    # 🚨 FIXED: Changed from int to str to match UUID/BKG-string format
+    booking_id: str
     booking_status: str
     scheduled_time: Optional[datetime]
 
@@ -197,18 +198,21 @@ class SavedAddressResponse(ORMBase):
 # ==========================================
 
 class MedicalRecordCreate(BaseModel):
-    booking_id: int
+    # 🚨 FIXED: Changed from int to str
+    booking_id: str
     diagnosis: str
     report_url: Optional[str] = None
 
 class MedicalRecordResponse(ORMBase):
     record_id: int
-    booking_id: int
+    # 🚨 FIXED: Changed from int to str
+    booking_id: str
     diagnosis: str
     report_url: Optional[str]
 
 class ReviewCreate(BaseModel):
-    booking_id: int
+    # 🚨 FIXED: Changed from int to str
+    booking_id: str
     rating: int 
     comment: Optional[str] = None
 
@@ -217,7 +221,8 @@ class ReviewOut(ReviewCreate, ORMBase):
     created_at: Optional[datetime] = None
 
 class ComplaintCreate(BaseModel):
-    booking_id: int
+    # 🚨 FIXED: Changed from int to str
+    booking_id: str
     complaint_text: str
 
 class ComplaintOut(ComplaintCreate, ORMBase):
@@ -234,11 +239,13 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
  
 class VideoMeetingResponse(ORMBase):
-    booking_id: int
+    # 🚨 FIXED: Changed from int to str
+    booking_id: str
     room_name: str
     host_url: str
     join_url: str
     status: str
+
 class ScheduleUpdate(BaseModel):
     day: str
     slots: List[str]
@@ -250,4 +257,4 @@ class ProviderLocationUpdate(BaseModel):
 class BookingStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None
-    report_url: Optional[str] = None 
+    report_url: Optional[str] = None
