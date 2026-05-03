@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 import models 
 import os
-from routers import auth, booking, home, records, support, admin, admin_auth, providers, upload, users, websockets, reviews, complaints, feedback, provider_auth, meet #services,
+
+# 🚨 FIXED: Removed all the dead ghost routers (records, support, reviews, complaints, feedback, services)
+from routers import auth, booking, home, admin, admin_auth, providers, upload, users, websockets, provider_auth, meet
 
 models.Base.metadata.create_all(bind=engine)
  
@@ -21,6 +23,7 @@ app = FastAPI(title="V Healthcare API")
 os.makedirs("uploads", exist_ok=True)
 os.makedirs("uploads/profiles", exist_ok=True)
 os.makedirs("uploads/medical_records", exist_ok=True)
+os.makedirs("uploads/reports", exist_ok=True) # Added to support the booking/report endpoint
 
 # This tells FastAPI to allow the browser to see files in the 'uploads' folder
 # (It will no longer crash here because the folders now guaranteed exist!)
@@ -39,24 +42,26 @@ def root():
     return {"status": "V Healthcare API is Online"}
  
 
-# Connect Routers
+# Connect Active Routers ONLY
 app.include_router(auth)
-app.include_router(home)
-# app.include_router(services)
-app.include_router(booking)
-app.include_router(records)
-app.include_router(support)
-app.include_router(admin)
-app.include_router(admin_auth)
-app.include_router(providers)
 app.include_router(provider_auth)
-app.include_router(upload)
+app.include_router(admin_auth)
+app.include_router(home)
 app.include_router(users)
-app.include_router(websockets)
-app.include_router(reviews)
-app.include_router(complaints)
-app.include_router(feedback)
+app.include_router(providers)
+app.include_router(booking)
 app.include_router(meet)
+app.include_router(upload)
+app.include_router(websockets)
+app.include_router(admin)
+
+# 🚨 COMMENTED OUT DEAD ROUTERS
+# app.include_router(services)
+# app.include_router(records)
+# app.include_router(support)
+# app.include_router(reviews)
+# app.include_router(complaints)
+# app.include_router(feedback)
 # # main.py
 # from fastapi import FastAPI, Depends, Response
 # from fastapi.middleware.cors import CORSMiddleware
