@@ -127,6 +127,9 @@ def get_single_booking(booking_id: str, db: Session = Depends(get_db), current_u
         "time": booking.scheduled_time.strftime("%I:%M %p") if booking.scheduled_time else "TBD",
         "visit_type": v_type,
         "address": booking.delivery_address if v_type != "Video Consult" else "Secure Google Meet Invite",
+        "flat_number": getattr(booking, "flat_number", "Online"),
+        "building_name": getattr(booking, "building_name", "Online"),
+        "landmark": getattr(booking, "landmark", "Online"),
         "patient_name": getattr(booking, "patient_name", "Self"),
         "status": booking.booking_status.lower() 
     }

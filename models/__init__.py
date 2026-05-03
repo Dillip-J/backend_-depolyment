@@ -1,24 +1,17 @@
-# # models/__init__.py
+# models/__init__.py
 from database import Base
 
-from .users import User, SavedAddress, Admin
-# Renamed to LabOffering to prevent ImportError
-from .providers import ServiceProvider, DoctorService, ProviderAvailability, Medicine, PharmacyInventory, LabTest, LabOffering
-from .bookings import Booking, MedicalRecord, Review, Complaint, VideoMeeting
+from .users import User, Admin
+from .providers import ServiceProvider, DoctorService, ProviderAvailability
+from .bookings import Booking, VideoMeeting
 
-# catalog items to the rest of the app!
-from .catalog import Service, CatalogItem
-
-# # # models/__init__.py
-# from database import Base
-
-# from .users import User, Admin
-# # Renamed to LabOffering to prevent ImportError
-# from .providers import ServiceProvider, ProviderAvailability
-# from .bookings import Booking, VideoMeeting
-
+# # models/__init__.py
 # from database import Base
 
 # from .users import User, SavedAddress, Admin
-# from .providers import ServiceProvider, DoctorService, Medicine, PharmacyInventory, LabTest, LabTestOffering
-# from .bookings import Booking, MedicalRecord, Review, Complaint, ServiceReport
+# # Renamed to LabOffering to prevent ImportError
+# from .providers import ServiceProvider, DoctorService, ProviderAvailability, Medicine, PharmacyInventory, LabTest, LabOffering
+# from .bookings import Booking, MedicalRecord, Review, Complaint, VideoMeeting
+
+# catalog items to the rest of the app!
+# from .catalog import Service, CatalogItem

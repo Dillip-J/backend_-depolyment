@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from database import engine, Base, get_db
 import models 
 import os
-from routers import auth, booking, home, records, support, services, admin, admin_auth, providers, upload, users, websockets, reviews, complaints, feedback, provider_auth, meet
+from routers import auth, booking, home, records, support, admin, admin_auth, providers, upload, users, websockets, reviews, complaints, feedback, provider_auth, meet #services,
 
 models.Base.metadata.create_all(bind=engine)
  
@@ -42,7 +42,7 @@ def root():
 # Connect Routers
 app.include_router(auth)
 app.include_router(home)
-app.include_router(services)
+# app.include_router(services)
 app.include_router(booking)
 app.include_router(records)
 app.include_router(support)

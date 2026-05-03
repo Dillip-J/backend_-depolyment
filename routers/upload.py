@@ -8,133 +8,67 @@ from dependencies import get_current_provider
 
 router = APIRouter(prefix="/files", tags=["File Management"])
 
-
 def format_url(raw_url: str) -> str:
-    """Ensures local files have leading slash, keeps cloud URLs untouched"""
-    if raw_url.startswith("http"):
-        return raw_url
+    if raw_url.startswith("http"): return raw_url
     return f"/{raw_url}" if not raw_url.startswith("/") else raw_url
 
 
 @router.post("/provider/profile-photo")
-async def upload_provider_photo(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider)
-):
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only images are allowed.")
-
-    file_bytes = await file.read()
-    file_extension = file.filename.split(".")[-1]
-
-    # ✅ FIX: Save inside uploads folder
-    raw_url = storage_engine.upload_file(
-        file_bytes,
-        file_extension,
-        folder_name="uploads/profiles"   # 🔥 FIXED
-    )
-
+async def upload_provider_photo(file: UploadFile = File(...), db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
+    if not file.content_type.startswith("image/"): raise HTTPException(status_code=400, detail="Only images are allowed.")
+    
+    raw_url = storage_engine.upload_file(await file.read(), file.filename.split(".")[-1], folder_name="uploads/profiles")
     final_url = format_url(raw_url)
 
-    # delete old image
     if current_provider.profile_photo_url:
         storage_engine.delete_file(current_provider.profile_photo_url.lstrip("/"))
 
     current_provider.profile_photo_url = final_url
     db.commit()
-
     return {"message": "Profile photo updated", "url": final_url}
 
 
 @router.delete("/provider/profile-photo")
-async def remove_provider_photo(
-    db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider)
-):
-    if not current_provider.profile_photo_url:
-        raise HTTPException(status_code=400, detail="No profile photo to delete.")
-
-    success = storage_engine.delete_file(
-        current_provider.profile_photo_url.lstrip("/")  # ✅ FIX
-    )
-
-    if success:
+async def remove_provider_photo(db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
+    if not current_provider.profile_photo_url: raise HTTPException(status_code=400, detail="No profile photo to delete.")
+    
+    if storage_engine.delete_file(current_provider.profile_photo_url.lstrip("/")):
         current_provider.profile_photo_url = None
         db.commit()
         return {"message": "Profile photo removed successfully."}
-    else:
-        raise HTTPException(status_code=500, detail="Failed to delete file.")
+    raise HTTPException(status_code=500, detail="Failed to delete file.")
 
-
+# 🚨 FIXED: Changed booking_id to string, removed MedicalRecords model
 @router.post("/medical-report/{booking_id}")
 async def upload_medical_report(
-    booking_id: int,
+    booking_id: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_provider: models.ServiceProvider = Depends(get_current_provider)
 ):
-    booking = db.query(models.Booking).filter(
-        models.Booking.booking_id == booking_id
-    ).first()
+    booking = db.query(models.Booking).filter(models.Booking.booking_id == booking_id).first()
+    if not booking: raise HTTPException(status_code=404, detail="Booking not found.")
+    if str(booking.provider_id) != str(current_provider.provider_id): raise HTTPException(status_code=403, detail="Not authorized.")
 
-    if not booking:
-        raise HTTPException(status_code=404, detail="Booking not found.")
-
-    if str(booking.provider_id) != str(current_provider.provider_id):
-        raise HTTPException(status_code=403, detail="Not authorized.")
-
-    file_bytes = await file.read()
-    file_extension = file.filename.split(".")[-1]
-
-    # ✅ FIX: Save inside uploads folder
-    raw_url = storage_engine.upload_file(
-        file_bytes,
-        file_extension,
-        folder_name="uploads/medical_records"   # 🔥 FIXED
-    )
-
+    raw_url = storage_engine.upload_file(await file.read(), file.filename.split(".")[-1], folder_name="uploads/medical_records")
     final_url = format_url(raw_url)
 
-    new_record = models.MedicalRecord(
-        booking_id=booking.booking_id,
-        diagnosis="Report Uploaded via Provider API",
-        report_url=final_url
-    )
-
-    db.add(new_record)
+    # Note: If you want to attach the report_url directly to the booking in the future, 
+    # you will need to add a `report_url` column to the bookings table.
+    # For now, it simply marks the booking as completed.
     booking.booking_status = "completed"
+    booking.clinical_notes = "Report Uploaded via Provider API"
     db.commit()
 
     return {"message": "Medical report uploaded securely.", "url": final_url}
 
 @router.post("/booking/report")
-async def upload_booking_report(
-    file: UploadFile = File(...)
-):
-    # 1. Secure the file type (Only allow PDFs and Images)
+async def upload_booking_report(file: UploadFile = File(...)):
     if not file.content_type.startswith(("image/", "application/pdf")):
         raise HTTPException(status_code=400, detail="Only images and PDFs are allowed.")
 
-    file_bytes = await file.read()
-    
-    # Safely get the extension
     filename_parts = file.filename.split(".")
-    file_extension = filename_parts[-1] if len(filename_parts) > 1 else "pdf"
-
-    # 2. Use YOUR custom storage engine to save it
-    raw_url = storage_engine.upload_file(
-        file_bytes,
-        file_extension,
-        folder_name="uploads/reports"   # Keep it in a safe folder
-    )
-
+    raw_url = storage_engine.upload_file(await file.read(), filename_parts[-1] if len(filename_parts) > 1 else "pdf", folder_name="uploads/reports")
     final_url = format_url(raw_url)
 
-    # 3. Return both 'url' and 'file_url' to make sure the frontend catches it regardless of what key it expects
-    return {
-        "status": "Success",
-        "message": "Report uploaded successfully", 
-        "url": final_url,
-        "file_url": final_url 
-    }
+    return {"status": "Success", "message": "Report uploaded successfully", "url": final_url, "file_url": final_url }

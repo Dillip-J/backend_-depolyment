@@ -1,5 +1,5 @@
 # schemas.py
-from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from typing import Optional, List
 from uuid import UUID
 from datetime import datetime
@@ -42,11 +42,7 @@ class ProviderCreate(BaseModel):
     password: str
     provider_type: str 
     phone: Optional[str] = None
-    address: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
     profile_photo_url: Optional[str] = None
-    license_document_url: Optional[str] = None
     category: Optional[str] = "General"
     price: Optional[float] = None
 
@@ -64,16 +60,14 @@ class ProviderResponse(ORMBase):
 class ProviderProfileUpdate(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
-    address: Optional[str] = None
     bio: Optional[str] = None
     bank_name: Optional[str] = None
     account_number: Optional[str] = None
     ifsc_code: Optional[str] = None
 
 # ==========================================
-# THE 3 DOMAINS: DOCTORS, PHARMACIES, LABS
+# DOCTOR DOMAIN ONLY
 # ==========================================
-
 class DoctorServiceCreate(BaseModel):
     service_name: str
     category: Optional[str] = "General"
@@ -95,50 +89,6 @@ class DoctorServiceResponse(ORMBase):
     description: Optional[str] = None
     image_url: Optional[str] = None
 
-class MedicineCreate(BaseModel):
-    medicine_name: str
-    manufacturer: Optional[str] = None
-    requires_prescription: bool = False
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-
-class MedicineResponse(ORMBase):
-    medicine_id: int
-    medicine_name: str
-    requires_prescription: bool
-    image_url: Optional[str] = None
-
-class PharmacyInventoryCreate(BaseModel):
-    medicine_id: int
-    price: float
-    in_stock: bool = True
-    custom_description: Optional[str] = None
-    custom_image_url: Optional[str] = None
-
-class PharmacyInventoryResponse(ORMBase):
-    inventory_id: int
-    price: Decimal
-    in_stock: bool
-    medicine: MedicineResponse 
-    custom_description: Optional[str] = None
-    custom_image_url: Optional[str] = None
-
-class LabTestCreate(BaseModel):
-    test_name: str
-    category: Optional[str] = None
-    description: Optional[str] = None
-
-class LabTestResponse(ORMBase):
-    test_id: int
-    test_name: str
-    category: Optional[str]
-
-class LabOfferingCreate(BaseModel):
-    test_id: int
-    price: float
-    home_collection_available: bool = False
-    preparation_rules: Optional[str] = None
-    image_url: Optional[str] = None
 
 # ==========================================
 # BOOKINGS & TRANSACTIONS
@@ -146,92 +96,27 @@ class LabOfferingCreate(BaseModel):
 class BookingCreate(BaseModel):
     provider_id: UUID
     doctor_service_id: Optional[int] = None
-    medicine_id: Optional[int] = None
-    lab_test_id: Optional[int] = None
     scheduled_time: Optional[datetime] = None
     delivery_address: Optional[str] = None
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
     order_notes: Optional[str] = None
     patient_name: Optional[str] = None
     patient_age: Optional[int] = None
     patient_gender: Optional[str] = None
     symptoms: Optional[str] = None
+    building_name: Optional[str] = "Online"
+    flat_number: Optional[str] = "Online"
+    landmark: Optional[str] = "Online"
+    total_amount: Optional[float] = None # 🚨 ADDED: So the backend accepts the price from the frontend!
 
-    @model_validator(mode='after')
-    def check_exclusive_service(self):
-        provided_services = [
-            bool(self.doctor_service_id), 
-            bool(self.medicine_id), 
-            bool(self.lab_test_id)
-        ]
-        if sum(provided_services) > 1:
-            raise ValueError("A booking cannot mix Doctors, Medicines, and Labs. Please select only ONE service type.")
-        return self
-        
 class BookingResponse(ORMBase):
-    # 🚨 FIXED: Changed from int to str to match UUID/BKG-string format
     booking_id: str
     booking_status: str
     scheduled_time: Optional[datetime]
 
-# ==========================================
-# SAVED ADDRESSES
-# ==========================================
-class SavedAddressCreate(BaseModel):
-    label: str
-    address_text: str
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    is_default: bool = False
-
-class SavedAddressResponse(ORMBase):
-    address_id: int
-    label: str
-    address_text: str
-    latitude: Optional[float]
-    longitude: Optional[float]
-    is_default: bool
 
 # ==========================================
-# FEEDBACK & RECORDS
+# MISC ROUTER SCHEMAS
 # ==========================================
-
-class MedicalRecordCreate(BaseModel):
-    # 🚨 FIXED: Changed from int to str
-    booking_id: str
-    diagnosis: str
-    report_url: Optional[str] = None
-
-class MedicalRecordResponse(ORMBase):
-    record_id: int
-    # 🚨 FIXED: Changed from int to str
-    booking_id: str
-    diagnosis: str
-    report_url: Optional[str]
-
-class ReviewCreate(BaseModel):
-    # 🚨 FIXED: Changed from int to str
-    booking_id: str
-    rating: int 
-    comment: Optional[str] = None
-
-class ReviewOut(ReviewCreate, ORMBase):
-    review_id: int
-    created_at: Optional[datetime] = None
-
-class ComplaintCreate(BaseModel):
-    # 🚨 FIXED: Changed from int to str
-    booking_id: str
-    complaint_text: str
-
-class ComplaintOut(ComplaintCreate, ORMBase):
-    complaint_id: int
-    user_id: UUID
-    provider_id: UUID
-    status: str
-    created_at: Optional[datetime] = None
-
 class UserOut(BaseModel):
     user_id: UUID 
     name: str
@@ -239,7 +124,6 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
  
 class VideoMeetingResponse(ORMBase):
-    # 🚨 FIXED: Changed from int to str
     booking_id: str
     room_name: str
     host_url: str
@@ -250,11 +134,270 @@ class ScheduleUpdate(BaseModel):
     day: str
     slots: List[str]
 
-class ProviderLocationUpdate(BaseModel):
-    latitude: float
-    longitude: float
-
 class BookingStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None
     report_url: Optional[str] = None
+# # schemas.py
+# from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, model_validator
+# from typing import Optional, List
+# from uuid import UUID
+# from datetime import datetime
+# from decimal import Decimal
+
+# class ORMBase(BaseModel):
+#     model_config = ConfigDict(from_attributes=True)
+
+# # ==========================================
+# # AUTHENTICATION TOKENS (JWT)
+# # ==========================================
+# class Token(BaseModel):
+#     access_token: str
+#     token_type: str
+
+# class TokenData(BaseModel):
+#     id: Optional[UUID] = None
+#     role: Optional[str] = None 
+
+# # ==========================================
+# # AUTHENTICATION SCHEMAS
+# # ==========================================
+# class UserCreate(BaseModel):
+#     name: str
+#     email: EmailStr
+#     password: str
+#     phone: Optional[str] = None
+
+# class UserLogin(BaseModel):
+#     email: EmailStr
+#     password: str
+
+# class UserUpdate(BaseModel):
+#     name: Optional[str] = None
+#     phone: Optional[str] = None
+
+# class ProviderCreate(BaseModel):
+#     name: str
+#     email: EmailStr
+#     password: str
+#     provider_type: str 
+#     phone: Optional[str] = None
+#     address: Optional[str] = None
+#     latitude: Optional[float] = None
+#     longitude: Optional[float] = None
+#     profile_photo_url: Optional[str] = None
+#     license_document_url: Optional[str] = None
+#     category: Optional[str] = "General"
+#     price: Optional[float] = None
+
+# class ProviderLogin(BaseModel):
+#     email: EmailStr
+#     password: str
+
+# class ProviderResponse(ORMBase):
+#     provider_id: UUID
+#     name: str
+#     provider_type: str
+#     status: str
+#     profile_photo_url: Optional[str] = None
+
+# class ProviderProfileUpdate(BaseModel):
+#     name: Optional[str] = None
+#     phone: Optional[str] = None
+#     address: Optional[str] = None
+#     bio: Optional[str] = None
+#     bank_name: Optional[str] = None
+#     account_number: Optional[str] = None
+#     ifsc_code: Optional[str] = None
+
+# # ==========================================
+# # THE 3 DOMAINS: DOCTORS, PHARMACIES, LABS
+# # ==========================================
+
+# class DoctorServiceCreate(BaseModel):
+#     service_name: str
+#     category: Optional[str] = "General"
+#     description: Optional[str] = None
+#     price: float
+#     image_url: Optional[str] = None
+
+#     @field_validator('price')
+#     @classmethod
+#     def price_must_be_positive(cls, v):
+#         if v <= 0:
+#             raise ValueError('Price cannot be zero or negative.')
+#         return v
+
+# class DoctorServiceResponse(ORMBase):
+#     service_id: int
+#     service_name: str
+#     price: Decimal
+#     description: Optional[str] = None
+#     image_url: Optional[str] = None
+
+# class MedicineCreate(BaseModel):
+#     medicine_name: str
+#     manufacturer: Optional[str] = None
+#     requires_prescription: bool = False
+#     description: Optional[str] = None
+#     image_url: Optional[str] = None
+
+# class MedicineResponse(ORMBase):
+#     medicine_id: int
+#     medicine_name: str
+#     requires_prescription: bool
+#     image_url: Optional[str] = None
+
+# class PharmacyInventoryCreate(BaseModel):
+#     medicine_id: int
+#     price: float
+#     in_stock: bool = True
+#     custom_description: Optional[str] = None
+#     custom_image_url: Optional[str] = None
+
+# class PharmacyInventoryResponse(ORMBase):
+#     inventory_id: int
+#     price: Decimal
+#     in_stock: bool
+#     medicine: MedicineResponse 
+#     custom_description: Optional[str] = None
+#     custom_image_url: Optional[str] = None
+
+# class LabTestCreate(BaseModel):
+#     test_name: str
+#     category: Optional[str] = None
+#     description: Optional[str] = None
+
+# class LabTestResponse(ORMBase):
+#     test_id: int
+#     test_name: str
+#     category: Optional[str]
+
+# class LabOfferingCreate(BaseModel):
+#     test_id: int
+#     price: float
+#     home_collection_available: bool = False
+#     preparation_rules: Optional[str] = None
+#     image_url: Optional[str] = None
+
+# # ==========================================
+# # BOOKINGS & TRANSACTIONS
+# # ==========================================
+# class BookingCreate(BaseModel):
+#     provider_id: UUID
+#     doctor_service_id: Optional[int] = None
+#     medicine_id: Optional[int] = None
+#     lab_test_id: Optional[int] = None
+#     scheduled_time: Optional[datetime] = None
+#     delivery_address: Optional[str] = None
+#     latitude: Optional[float] = None
+#     longitude: Optional[float] = None
+#     order_notes: Optional[str] = None
+#     patient_name: Optional[str] = None
+#     patient_age: Optional[int] = None
+#     patient_gender: Optional[str] = None
+#     symptoms: Optional[str] = None
+#     building_name: Optional[str] = "Online"
+#     flat_number: Optional[str] = "Online"
+#     landmark: Optional[str] = "Online"
+
+#     @model_validator(mode='after')
+#     def check_exclusive_service(self):
+#         provided_services = [
+#             bool(self.doctor_service_id), 
+#             bool(self.medicine_id), 
+#             bool(self.lab_test_id)
+#         ]
+#         if sum(provided_services) > 1:
+#             raise ValueError("A booking cannot mix Doctors, Medicines, and Labs. Please select only ONE service type.")
+#         return self
+        
+# class BookingResponse(ORMBase):
+#     # 🚨 FIXED: Changed from int to str to match UUID/BKG-string format
+#     booking_id: str
+#     booking_status: str
+#     scheduled_time: Optional[datetime]
+
+# # ==========================================
+# # SAVED ADDRESSES
+# # ==========================================
+# class SavedAddressCreate(BaseModel):
+#     label: str
+#     address_text: str
+#     latitude: Optional[float] = None
+#     longitude: Optional[float] = None
+#     is_default: bool = False
+
+# class SavedAddressResponse(ORMBase):
+#     address_id: int
+#     label: str
+#     address_text: str
+#     latitude: Optional[float]
+#     longitude: Optional[float]
+#     is_default: bool
+
+# # ==========================================
+# # FEEDBACK & RECORDS
+# # ==========================================
+
+# class MedicalRecordCreate(BaseModel):
+#     # 🚨 FIXED: Changed from int to str
+#     booking_id: str
+#     diagnosis: str
+#     report_url: Optional[str] = None
+
+# class MedicalRecordResponse(ORMBase):
+#     record_id: int
+#     # 🚨 FIXED: Changed from int to str
+#     booking_id: str
+#     diagnosis: str
+#     report_url: Optional[str]
+
+# class ReviewCreate(BaseModel):
+#     # 🚨 FIXED: Changed from int to str
+#     booking_id: str
+#     rating: int 
+#     comment: Optional[str] = None
+
+# class ReviewOut(ReviewCreate, ORMBase):
+#     review_id: int
+#     created_at: Optional[datetime] = None
+
+# class ComplaintCreate(BaseModel):
+#     # 🚨 FIXED: Changed from int to str
+#     booking_id: str
+#     complaint_text: str
+
+# class ComplaintOut(ComplaintCreate, ORMBase):
+#     complaint_id: int
+#     user_id: UUID
+#     provider_id: UUID
+#     status: str
+#     created_at: Optional[datetime] = None
+
+# class UserOut(BaseModel):
+#     user_id: UUID 
+#     name: str
+#     email: str
+#     model_config = ConfigDict(from_attributes=True)
+ 
+# class VideoMeetingResponse(ORMBase):
+#     # 🚨 FIXED: Changed from int to str
+#     booking_id: str
+#     room_name: str
+#     host_url: str
+#     join_url: str
+#     status: str
+
+# class ScheduleUpdate(BaseModel):
+#     day: str
+#     slots: List[str]
+
+# class ProviderLocationUpdate(BaseModel):
+#     latitude: float
+#     longitude: float
+
+# class BookingStatusUpdate(BaseModel):
+#     status: str
+#     notes: Optional[str] = None
+#     report_url: Optional[str] = None

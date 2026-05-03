@@ -29,7 +29,7 @@ def calculate_distance(lat1, lon1, lat2, lon2):
 # ==========================================
 @router.get("/")
 def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
-    # 1. Categories (Case-insensitive fix applied)
+    # 1. Categories
     approved_docs = db.query(models.ServiceProvider).filter(
         models.ServiceProvider.status.ilike('approved'),
         models.ServiceProvider.provider_type.ilike('doctor')
@@ -79,11 +79,10 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
     }
 
 # ==========================================
-# Route 2: Location-Based Search Engine (ETA & Dynamic Pricing)
+# Route 2: Location-Based Search Engine 
 # ==========================================
 @router.get("/nearest")
 def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "Doctor", db: Session = Depends(get_db)):
-    # 1. Fetch ALL APPROVED providers of the requested category (Case-Insensitive Fix!)
     providers = db.query(models.ServiceProvider).filter(
         models.ServiceProvider.provider_type.ilike(category),
         models.ServiceProvider.status.ilike('approved')
@@ -92,11 +91,9 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
     provider_distances = []
     
     for p in providers:
-        # Calculate distance
         dist = calculate_distance(lat, lon, p.latitude, p.longitude) if lat != 0.0 else float('inf')
         is_valid_dist = dist != float('inf')
 
-        # Base dictionary mapping database models to JS frontend keys
         p_dict = {
             "provider_id": str(p.provider_id),
             "name": p.name,
@@ -109,42 +106,27 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
             "longitude": getattr(p, "longitude", None),
             
             "profile_photo_url": getattr(p, "profile_photo_url", None),
-            
             "distance_km": round(dist, 1) if is_valid_dist else "Unknown",
             
-            # Base Doctor/Lab Pricing (Defaults)
-            "price": getattr(p, 'price', 500) if category.lower() == 'doctor' else getattr(p, 'price', 45),
-            "home_visit_charge": getattr(p, 'home_visit_charge', 200),
+            # 🚨 FIXED: Used consultation_fee instead of price
+            "price": getattr(p, 'consultation_fee', 500),
+            "home_visit_charge": 200, # Hardcoded baseline for MVP
         }
 
-        # Safely pull catalog services if they exist
         services = getattr(p, "doctor_services", [])
         if services:
             p_dict["doctor_services"] = [
                 {"service_name": s.service_name, "price": s.price} for s in services
             ]
 
-        # Dynamic ETA and Variable Delivery Pricing Logic
+        # Dynamic ETA Logic
         if is_valid_dist:
-            # 10 mins base prep + 4 mins per km
             eta_mins = int(10 + (dist * 4))
             p_dict["eta_string"] = f"{eta_mins} - {eta_mins + 15} mins"
-            # Delivery: Base ₹30 + ₹5 per km
-            p_dict["delivery_charge"] = int(30 + (dist * 5))
-            # Lab Collection: Base ₹10 + ₹2 per km
-            p_dict["home_collection_charge"] = int(10 + (dist * 2))
         else:
-            # Safe Fallbacks if User blocked GPS or Provider has no GPS
             p_dict["eta_string"] = "45 - 60 mins"
-            p_dict["delivery_charge"] = 50
-            p_dict["home_collection_charge"] = 15
 
         provider_distances.append((dist, p_dict))
 
-    # Sort by closest distance first
     provider_distances.sort(key=lambda x: x[0])
-
-    # Extract just the sorted dictionaries to send to the frontend
-    sorted_providers = [p[1] for p in provider_distances]
-    
-    return sorted_providers
+    return [p[1] for p in provider_distances]
