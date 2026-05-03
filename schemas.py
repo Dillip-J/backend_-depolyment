@@ -64,6 +64,7 @@ class ProviderProfileUpdate(BaseModel):
     bank_name: Optional[str] = None
     account_number: Optional[str] = None
     ifsc_code: Optional[str] = None
+    consultation_fee: Optional[float] = None
 
 # ==========================================
 # DOCTOR DOMAIN ONLY
