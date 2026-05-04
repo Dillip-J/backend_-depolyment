@@ -14,7 +14,7 @@ def get_uid(user_obj):
     return getattr(user_obj, "user_id", getattr(user_obj, "id", None))
 
 # ==========================================================
-# 🧹 THE AUTO-CANCEL JANITOR (Compatible with OLD models)
+# 🧹 THE AUTO-CANCEL JANITOR
 # ==========================================================
 def auto_clean_expired_bookings(db: Session):
     # Sweeps for bookings 24 hours past their scheduled time that were never completed
@@ -27,7 +27,6 @@ def auto_clean_expired_bookings(db: Session):
     
     for b in expired_bookings:
         b.booking_status = "canceled"
-        # We don't touch clinical_notes here because your old DB doesn't have it!
     
     if expired_bookings:
         db.commit()
@@ -63,6 +62,10 @@ def create_booking(data: schemas.BookingCreate, db: Session = Depends(get_db), c
 
     booking_data["user_id"] = uid
     booking_data["booking_status"] = "confirmed" 
+
+    # 🚨 FIX: Explicitly ensure total_amount is passed through if it exists
+    if hasattr(data, "total_amount") and data.total_amount is not None:
+        booking_data["total_amount"] = data.total_amount
 
     booking = models.Booking(**booking_data)
     db.add(booking)
@@ -131,7 +134,8 @@ def get_single_booking(booking_id: str, db: Session = Depends(get_db), current_u
         "building_name": getattr(booking, "building_name", "Online"),
         "landmark": getattr(booking, "landmark", "Online"),
         "patient_name": getattr(booking, "patient_name", "Self"),
-        "status": booking.booking_status.lower() 
+        "status": booking.booking_status.lower(),
+        "total_amount": booking.total_amount # 🚨 Added so the frontend can retrieve it if needed 
     }
 # from fastapi import APIRouter, Depends, HTTPException
 # from sqlalchemy.orm import Session, joinedload
