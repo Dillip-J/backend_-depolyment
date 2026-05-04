@@ -36,11 +36,35 @@ async def register_provider(
         category=category,
         latitude=latitude, 
         longitude=longitude,
-        status="approved" # Automatically approved for immediate access
+        status="approved", # Automatically approved for immediate access
+        consultation_fee=600.0 # 🚨 Base fee set to 600
     )
     
     db.add(new_provider)
     db.commit()
+    db.refresh(new_provider) # 🚨 GRAB THE NEW ID
+
+    # 🚨 THE INJECTOR: Auto-create the default catalog for Doctors
+    if provider_type.lower() == 'doctor':
+        video_service = models.DoctorService(
+            provider_id=new_provider.provider_id,
+            service_name="Video Consult",
+            category=category,
+            price=500.0,
+            description="Online video consultation"
+        )
+        
+        home_service = models.DoctorService(
+            provider_id=new_provider.provider_id,
+            service_name="Home Visit",
+            category=category,
+            price=800.0, # 600 base + 200 travel
+            description="Home visit (includes ₹200 travel expense)"
+        )
+        
+        db.add_all([video_service, home_service])
+        db.commit()
+
     return {"message": "Application submitted and approved. You can now log in."}
 
 # ==========================================
