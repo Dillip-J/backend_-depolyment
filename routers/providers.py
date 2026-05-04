@@ -57,7 +57,6 @@ def get_provider_dashboard(
         short_id = str(b.booking_id).split('-')[0].upper()
         status = b.booking_status.lower() if b.booking_status else "pending"
 
-        # 🚨 FIXED: Uses total_amount from Booking model
         booking_price = float(getattr(b, "total_amount") or 500.00)
         
         if status == "completed":
@@ -80,6 +79,7 @@ def get_provider_dashboard(
             "building_name": getattr(b, "building_name", "Online"),
             "landmark": getattr(b, "landmark", "Online"),
             "symptoms": getattr(b, "symptoms", "No additional notes provided."),
+            "clinical_notes": getattr(b, "clinical_notes", ""), # 🚨 FIX: Backend now sends clinical notes!
             "price": booking_price
         })
 
@@ -198,7 +198,7 @@ def update_provider_booking_status(
     if not booking: raise HTTPException(status_code=404, detail="Booking not found")
 
     booking.booking_status = data.status
-    if data.notes: booking.clinical_notes = data.notes # 🚨 FIXED: Used clinical_notes instead of symptoms
+    if data.notes: booking.clinical_notes = data.notes 
     db.commit()
     return {"message": f"Status updated to {data.status}"}
 
