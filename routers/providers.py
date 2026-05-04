@@ -78,8 +78,8 @@ def get_provider_dashboard(
             "flat_number": getattr(b, "flat_number", "Online"),
             "building_name": getattr(b, "building_name", "Online"),
             "landmark": getattr(b, "landmark", "Online"),
-            "symptoms": getattr(b, "symptoms", "No additional notes provided."),
-            "clinical_notes": getattr(b, "clinical_notes", ""), # 🚨 FIX: Backend now sends clinical notes!
+            "symptoms": getattr(b, "symptoms", "No symptoms provided."),
+            "clinical_notes": getattr(b, "clinical_notes", ""), 
             "price": booking_price
         })
 
@@ -225,10 +225,15 @@ def delete_catalog_item(item_id: int, db: Session = Depends(get_db), current_pro
             return {"message": "Service deleted"}
     raise HTTPException(status_code=404, detail="Service not found.")
 
+# 🚨 THE MISSING ROUTE: This is required to fetch the phone number
+@router.get("/me")
+def get_provider_profile(current_provider: models.ServiceProvider = Depends(get_current_provider)):
+    return current_provider
+
 @router.patch("/me")
 def update_provider_profile(data: schemas.ProviderProfileUpdate, db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
     for key, value in data.dict(exclude_unset=True).items():
         setattr(current_provider, key, value)
     db.commit()
     db.refresh(current_provider)
-    return {"message": "Profile updated successfully!"}
+    return {"message": "Profile updated successfully!", "provider": current_provider}
