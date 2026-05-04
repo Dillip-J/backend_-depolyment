@@ -1,6 +1,6 @@
 # models/providers.py
 import uuid
-from sqlalchemy import Column, String, BigInteger, Numeric, Text, ForeignKey, Integer
+from sqlalchemy import Column, String, BigInteger, Float, Text, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from database import Base
@@ -13,13 +13,13 @@ class ServiceProvider(Base):
     provider_type = Column(String(50), nullable=False, default='Doctor') 
     name = Column(String(255), nullable=False)
     category = Column(String(100), nullable=True) 
-    consultation_fee = Column(Numeric(10, 2), default=500.00) 
+    consultation_fee = Column(Float, default=500.0) # 🚨 CHANGED: Numeric to Float to match schema
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
     phone = Column(String(20))
     address = Column(Text) 
-    latitude = Column(Numeric(10, 8)) 
-    longitude = Column(Numeric(11, 8)) 
+    latitude = Column(Float) # 🚨 CHANGED: Numeric to Float
+    longitude = Column(Float) # 🚨 CHANGED: Numeric to Float
     status = Column(String(50), default='pending')
     profile_photo_url = Column(String(500))
     bio = Column(Text, nullable=True) 
@@ -53,11 +53,9 @@ class DoctorService(Base):
     service_name = Column(String(255), nullable=False)
     category = Column(String(100), nullable=False) 
     description = Column(Text)
-    price = Column(Numeric(10, 2), nullable=False)
+    price = Column(Float, nullable=False) # 🚨 CHANGED: Numeric to Float
     image_url = Column(String(500), nullable=True)
     status = Column(String(50), default='active')
-
-    # 🚨 FIXED: Removed the stray "lable=True)" syntax error
     provider = relationship("ServiceProvider", back_populates="doctor_services")
 # # models/providers.py
 # import uuid

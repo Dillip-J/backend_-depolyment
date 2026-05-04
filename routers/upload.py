@@ -38,7 +38,7 @@ async def remove_provider_photo(db: Session = Depends(get_db), current_provider:
         return {"message": "Profile photo removed successfully."}
     raise HTTPException(status_code=500, detail="Failed to delete file.")
 
-# 🚨 FIXED: Changed booking_id to string, removed MedicalRecords model
+
 @router.post("/medical-report/{booking_id}")
 async def upload_medical_report(
     booking_id: str,
@@ -53,11 +53,12 @@ async def upload_medical_report(
     raw_url = storage_engine.upload_file(await file.read(), file.filename.split(".")[-1], folder_name="uploads/medical_records")
     final_url = format_url(raw_url)
 
-    # Note: If you want to attach the report_url directly to the booking in the future, 
-    # you will need to add a `report_url` column to the bookings table.
-    # For now, it simply marks the booking as completed.
+    # 🚨 FIX: Actually attach the report to the booking so the Patient Dashboard can see it!
+    # Ensure your models.Booking has `report_url = Column(String(500), nullable=True)`
+    booking.report_url = final_url
     booking.booking_status = "completed"
-    booking.clinical_notes = "Report Uploaded via Provider API"
+    booking.clinical_notes = "Medical Report & Prescription Attached."
+    
     db.commit()
 
     return {"message": "Medical report uploaded securely.", "url": final_url}

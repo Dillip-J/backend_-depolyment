@@ -1,6 +1,6 @@
 # routers/home.py
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from database import get_db
 import models
@@ -83,7 +83,11 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
 # ==========================================
 @router.get("/nearest")
 def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "Doctor", db: Session = Depends(get_db)):
-    providers = db.query(models.ServiceProvider).filter(
+    
+    # 🚨 FIX: Added joinedload so doctor_services are fetched in 1 query, not 100!
+    providers = db.query(models.ServiceProvider).options(
+        joinedload(models.ServiceProvider.doctor_services)
+    ).filter(
         models.ServiceProvider.provider_type.ilike(category),
         models.ServiceProvider.status.ilike('approved')
     ).all()
@@ -108,15 +112,15 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
             "profile_photo_url": getattr(p, "profile_photo_url", None),
             "distance_km": round(dist, 1) if is_valid_dist else "Unknown",
             
-            # 🚨 FIXED: Used consultation_fee instead of price
             "price": getattr(p, 'consultation_fee', 500),
-            "home_visit_charge": 200, # Hardcoded baseline for MVP
+            "home_visit_charge": 200, 
         }
 
+        # Safe to access now, since we joinedloaded it above!
         services = getattr(p, "doctor_services", [])
         if services:
             p_dict["doctor_services"] = [
-                {"service_name": s.service_name, "price": s.price} for s in services
+                {"service_name": s.service_name, "price": float(s.price)} for s in services
             ]
 
         # Dynamic ETA Logic

@@ -28,7 +28,6 @@ def get_my_profile(
     current_user: models.User = Depends(get_current_user) # <-- THE LOCK
 ):
     """Fetches the securely logged-in user's profile."""
-    # 🚨 FIXED: Removed the SavedAddress query that would crash the database
     return {
         "user_id": current_user.user_id,
         "name": current_user.name,
@@ -40,13 +39,12 @@ def get_my_profile(
 
 @router.patch("/me")
 def update_my_basic_info(
-    data: schemas.UserUpdate, # <-- Using your centralized schema!
+    data: schemas.UserUpdate, 
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user) # <-- THE LOCK
 ):
     """Updates the user's basic profile information securely."""
     
-    # Only update the fields they actually typed in!
     if data.name:
         current_user.name = data.name
     if data.phone:
@@ -77,15 +75,14 @@ async def update_my_photo(
     # Upload new file
     new_url = storage_engine.upload_file(file_bytes, file_extension, folder_name="user_profiles")
     
-    # Delete old file to save storage space
+    # 🚨 FIX: Added .lstrip("/") to prevent ghost files from stacking up!
     if getattr(current_user, 'profile_photo_url', None):
-        storage_engine.delete_file(current_user.profile_photo_url)
+        storage_engine.delete_file(current_user.profile_photo_url.lstrip("/"))
         
-    # We can directly modify current_user because the Bouncer fetched it from the DB!
-    current_user.profile_photo_url = new_url
+    current_user.profile_photo_url = f"/{new_url}" if not new_url.startswith(("http", "/")) else new_url
     db.commit()
     
-    return {"message": "Profile photo updated", "url": new_url}
+    return {"message": "Profile photo updated", "url": current_user.profile_photo_url}
 
 
 # ==========================================
