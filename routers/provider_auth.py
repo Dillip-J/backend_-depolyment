@@ -38,7 +38,7 @@ async def register_provider(
         latitude=latitude, 
         longitude=longitude,
         status="approved",
-        consultation_fee=600.0
+        consultation_fee=500.0
     )
     
     db.add(new_provider)
@@ -59,7 +59,7 @@ async def register_provider(
             provider_id=new_provider.provider_id,
             service_name="Home Visit",
             category=category,
-            price=800.0, # As mentioned
+            price=700.0, # As mentioned
             description="Home visit (includes ₹200 travel expense)"
         )
         
