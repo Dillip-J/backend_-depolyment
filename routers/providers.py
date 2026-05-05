@@ -2,7 +2,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, String
-from pydantic import BaseModel
 from typing import List, Optional, Any, Dict
 from database import get_db
 import models, schemas
@@ -74,7 +73,7 @@ def get_provider_dashboard(
             "price": booking_price
         })
 
-    # 🚨 NEW: Calculate Exact Database Withdrawals
+    # Calculate Exact Database Withdrawals
     withdrawals = db.query(models.Withdrawal).filter(models.Withdrawal.provider_id == provider_id).all()
     total_withdrawn = sum(float(w.amount) for w in withdrawals if w.status == 'completed')
     pending_withdrawn = sum(float(w.amount) for w in withdrawals if w.status == 'pending')
@@ -101,7 +100,7 @@ def get_provider_dashboard(
         "items": formatted_bookings
     }
 
-# 🚨 NEW: API Endpoint to officially request a withdrawal
+# API Endpoint to officially request a withdrawal
 @router.post("/withdraw")
 def request_withdrawal(db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
     
@@ -159,8 +158,9 @@ def get_all_providers(db: Session = Depends(get_db)):
         "status": p.status
     } for p in providers]
 
+# 🚨 FIX: Pointing to schemas.ScheduleUpdate
 @router.post("/schedule")
-def update_provider_schedule(data: ScheduleUpdate, db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
+def update_provider_schedule(data: schemas.ScheduleUpdate, db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
     db.query(models.ProviderAvailability).filter(
         models.ProviderAvailability.provider_id == current_provider.provider_id,
         models.ProviderAvailability.day_of_week == data.day
@@ -209,10 +209,11 @@ def get_available_slots(provider_id: str, date: str, db: Session = Depends(get_d
             pass
     return final_slots
 
+# 🚨 FIX: Pointing to schemas.BookingStatusUpdate
 @router.patch("/bookings/{booking_id}/status")
 def update_provider_booking_status(
     booking_id: str,
-    data: BookingStatusUpdate,
+    data: schemas.BookingStatusUpdate,
     db: Session = Depends(get_db),
     current_provider: models.ServiceProvider = Depends(get_current_provider) 
 ):
