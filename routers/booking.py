@@ -13,13 +13,8 @@ def get_uid(user_obj):
         return user_obj.get("user_id", user_obj.get("id", user_obj.get("sub")))
     return getattr(user_obj, "user_id", getattr(user_obj, "id", None))
 
-# ==========================================================
-# 🧹 THE AUTO-CANCEL JANITOR
-# ==========================================================
 def auto_clean_expired_bookings(db: Session):
-    # Sweeps for bookings 24 hours past their scheduled time that were never completed
     cutoff_time = datetime.utcnow() - timedelta(hours=24)
-    
     expired_bookings = db.query(models.Booking).filter(
         models.Booking.booking_status.in_(["pending", "confirmed", "in_transit"]),
         models.Booking.scheduled_time < cutoff_time
@@ -27,22 +22,17 @@ def auto_clean_expired_bookings(db: Session):
     
     for b in expired_bookings:
         b.booking_status = "canceled"
-    
-    if expired_bookings:
-        db.commit()
-
+    if expired_bookings: db.commit()
 
 @router.post("/")
 def create_booking(data: schemas.BookingCreate, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     uid = get_uid(current_user)
-    if not uid:
-        raise HTTPException(status_code=401, detail="Invalid user session")
+    if not uid: raise HTTPException(status_code=401, detail="Invalid user session")
     
     patient_age = getattr(data, "patient_age", getattr(data, "age", 0))
     if patient_age <= 0 or patient_age >= 120:
         raise HTTPException(status_code=400, detail="Invalid age provided. Must be between 1 and 119.")
 
-    # 🚨 THE DOUBLE BOOKING FIREWALL
     if data.scheduled_time:
         existing_booking = db.query(models.Booking).filter(
             models.Booking.provider_id == data.provider_id,
@@ -55,15 +45,12 @@ def create_booking(data: schemas.BookingCreate, db: Session = Depends(get_db), c
                 raise HTTPException(status_code=400, detail="You have already booked this exact time slot. Please check your dashboard.")
             raise HTTPException(status_code=400, detail="Sorry, this time slot was just booked by someone else.")
 
-    try:
-        booking_data = data.model_dump(exclude_unset=True) 
-    except AttributeError:
-        booking_data = data.dict(exclude_unset=True) 
+    try: booking_data = data.model_dump(exclude_unset=True) 
+    except AttributeError: booking_data = data.dict(exclude_unset=True) 
 
     booking_data["user_id"] = uid
     booking_data["booking_status"] = "confirmed" 
 
-    # 🚨 FIX: Explicitly ensure total_amount is passed through if it exists
     if hasattr(data, "total_amount") and data.total_amount is not None:
         booking_data["total_amount"] = data.total_amount
 
@@ -74,36 +61,49 @@ def create_booking(data: schemas.BookingCreate, db: Session = Depends(get_db), c
     
     return {"booking_id": booking.booking_id, "id": booking.booking_id, "status": "Success"}
 
-
 @router.patch("/{booking_id}/cancel")
 def cancel_booking(booking_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     uid = get_uid(current_user)
     booking = db.query(models.Booking).filter(models.Booking.booking_id == booking_id, models.Booking.user_id == uid).first()
     if not booking: raise HTTPException(status_code=404, detail="Booking not found")
+    
     booking.booking_status = "canceled"
+    
+    # 🚨 REAL DATABASE REFUND TRACKING: This logs it in the DB when they cancel!
+    if booking.total_amount and float(booking.total_amount) > 0:
+        booking.refund_status = "initiated"
+        booking.refund_time = datetime.utcnow()
+        
     db.commit()
     return {"message": "Booking Canceled successfully"}
-
 
 @router.get("/me/history")
 def get_my_history(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     uid = get_uid(current_user)
-    auto_clean_expired_bookings(db) # 🧹 Run Janitor
+    auto_clean_expired_bookings(db) 
+    
+    # 🚨 AUTO-PROCESS REFUNDS FOR DEMO: If a refund was initiated > 60 seconds ago, mark as complete!
+    pending_refunds = db.query(models.Booking).filter(
+        models.Booking.user_id == uid, 
+        models.Booking.refund_status == 'initiated'
+    ).all()
+    
+    for b in pending_refunds:
+        if b.refund_time and datetime.utcnow() > b.refund_time + timedelta(seconds=60):
+            b.refund_status = 'completed'
+    if pending_refunds: db.commit()
     
     return db.query(models.Booking).options(joinedload(models.Booking.provider))\
         .filter(models.Booking.user_id == uid, models.Booking.booking_status.in_(["completed", "canceled", "rejected"]))\
         .order_by(models.Booking.created_at.desc()).all()
 
-
 @router.get("/me/active")
 def get_my_active_bookings(db: Session = Depends(get_db), current_user = Depends(get_current_user)):
     uid = get_uid(current_user)
-    auto_clean_expired_bookings(db) # 🧹 Run Janitor
-    
+    auto_clean_expired_bookings(db)
     return db.query(models.Booking).options(joinedload(models.Booking.provider))\
         .filter(models.Booking.user_id == uid, models.Booking.booking_status.in_(["pending", "confirmed", "in_transit"]))\
         .order_by(models.Booking.created_at.desc()).all()
-
 
 @router.get("/{booking_id}")
 def get_single_booking(booking_id: str, db: Session = Depends(get_db), current_user = Depends(get_current_user)):
@@ -111,15 +111,12 @@ def get_single_booking(booking_id: str, db: Session = Depends(get_db), current_u
     booking = db.query(models.Booking).options(joinedload(models.Booking.provider)).filter(
         models.Booking.booking_id == booking_id, models.Booking.user_id == uid
     ).first()
-    
     if not booking: raise HTTPException(status_code=404, detail="Booking not found")
         
     v_type = "Home Visit"
     addr = (booking.delivery_address or "").strip().lower()
-    if booking.provider and getattr(booking.provider, "provider_type", None) == "Pharmacy":
-        v_type = "Delivery"
-    elif addr in ["none", "null", "", "platform default", "online", "undefined"]:
-        v_type = "Video Consult"
+    if booking.provider and getattr(booking.provider, "provider_type", None) == "Pharmacy": v_type = "Delivery"
+    elif addr in ["none", "null", "", "platform default", "online", "undefined"]: v_type = "Video Consult"
 
     return {
         "display_id": booking.booking_id,
@@ -135,7 +132,7 @@ def get_single_booking(booking_id: str, db: Session = Depends(get_db), current_u
         "landmark": getattr(booking, "landmark", "Online"),
         "patient_name": getattr(booking, "patient_name", "Self"),
         "status": booking.booking_status.lower(),
-        "total_amount": booking.total_amount # 🚨 Added so the frontend can retrieve it if needed 
+        "total_amount": booking.total_amount
     }
 # from fastapi import APIRouter, Depends, HTTPException
 # from sqlalchemy.orm import Session, joinedload

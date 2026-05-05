@@ -1,7 +1,7 @@
 # routers/home.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func
+from sqlalchemy import or_
 from database import get_db
 import models
 from datetime import datetime
@@ -82,48 +82,50 @@ def get_user_home(user_id: str = None, db: Session = Depends(get_db)):
 # Route 2: Location-Based Search Engine 
 # ==========================================
 @router.get("/nearest")
-def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "Doctor", db: Session = Depends(get_db)):
+def get_nearest_providers(lat: float = Query(0.0), lon: float = Query(0.0), category: str = Query(None), db: Session = Depends(get_db)):
     
-    # 🚨 FIX: Added joinedload so doctor_services are fetched in 1 query, not 100!
-    providers = db.query(models.ServiceProvider).options(
+    query = db.query(models.ServiceProvider).options(
         joinedload(models.ServiceProvider.doctor_services)
-    ).filter(
-        models.ServiceProvider.provider_type.ilike(category),
-        models.ServiceProvider.status.ilike('approved')
-    ).all()
+    ).filter(models.ServiceProvider.status.ilike('approved'))
 
+    if category:
+        query = query.filter(
+            (models.ServiceProvider.provider_type.ilike(f"%{category}%")) | 
+            (models.ServiceProvider.category.ilike(f"%{category}%"))
+        )
+
+    providers = query.all()
     provider_distances = []
     
     for p in providers:
         dist = calculate_distance(lat, lon, p.latitude, p.longitude) if lat != 0.0 else float('inf')
         is_valid_dist = dist != float('inf')
 
+        # 🚨 FIX: Explicitly send the exact consultation_fee from the database!
+        base_fee = float(getattr(p, 'consultation_fee', 500.0))
+
         p_dict = {
             "provider_id": str(p.provider_id),
             "name": p.name,
             "provider_type": p.provider_type,
             "category": getattr(p, 'category', 'General'), 
-            
             "bio": getattr(p, "bio", "No description provided by this professional."),
             "phone": getattr(p, "phone", "Contact not available"),
             "latitude": getattr(p, "latitude", None),
             "longitude": getattr(p, "longitude", None),
-            
             "profile_photo_url": getattr(p, "profile_photo_url", None),
             "distance_km": round(dist, 1) if is_valid_dist else "Unknown",
-            
-            "price": getattr(p, 'consultation_fee', 500),
+            "consultation_fee": base_fee, # 🚨 Sent explicitly so JS doesn't guess
+            "price": base_fee, # Duplicate for backward compatibility
             "home_visit_charge": 200, 
         }
 
-        # Safe to access now, since we joinedloaded it above!
         services = getattr(p, "doctor_services", [])
         if services:
             p_dict["doctor_services"] = [
                 {"service_name": s.service_name, "price": float(s.price)} for s in services
             ]
 
-        # Dynamic ETA Logic
         if is_valid_dist:
             eta_mins = int(10 + (dist * 4))
             p_dict["eta_string"] = f"{eta_mins} - {eta_mins + 15} mins"
@@ -134,3 +136,20 @@ def get_nearest_providers(lat: float = 0.0, lon: float = 0.0, category: str = "D
 
     provider_distances.sort(key=lambda x: x[0])
     return [p[1] for p in provider_distances]
+
+# ==========================================
+# Route 3: Global Text Search
+# ==========================================
+@router.get("/search")
+def global_search(q: str = Query(..., min_length=2), db: Session = Depends(get_db)):
+    search_term = f"%{q}%"
+    
+    doctors = db.query(models.ServiceProvider).filter(
+        models.ServiceProvider.status == 'approved',
+        models.ServiceProvider.provider_type == 'Doctor',
+        (models.ServiceProvider.name.ilike(search_term)) | (models.ServiceProvider.category.ilike(search_term))
+    ).limit(5).all()
+
+    return {
+        "doctors": [{"provider_id": str(d.provider_id), "name": d.name, "category": getattr(d, "category", "General")} for d in doctors]
+    }

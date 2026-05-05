@@ -22,6 +22,7 @@ async def register_provider(
     longitude: float = Form(None),
     db: Session = Depends(get_db)
 ):
+    # Bug Check: Email exists?
     if db.query(models.ServiceProvider).filter(models.ServiceProvider.email == email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -36,13 +37,13 @@ async def register_provider(
         category=category,
         latitude=latitude, 
         longitude=longitude,
-        status="approved", # Automatically approved for immediate access
-        consultation_fee=600.0 # 🚨 Base fee set to 600
+        status="approved",
+        consultation_fee=600.0
     )
     
     db.add(new_provider)
-    db.commit()
-    db.refresh(new_provider) # 🚨 GRAB THE NEW ID
+    # 🚨 Flush here to get the new_provider.provider_id WITHOUT committing yet
+    db.flush() 
 
     # 🚨 THE INJECTOR: Auto-create the default catalog for Doctors
     if provider_type.lower() == 'doctor':
@@ -50,7 +51,7 @@ async def register_provider(
             provider_id=new_provider.provider_id,
             service_name="Video Consult",
             category=category,
-            price=500.0,
+            price=500.0, # As mentioned
             description="Online video consultation"
         )
         
@@ -58,12 +59,14 @@ async def register_provider(
             provider_id=new_provider.provider_id,
             service_name="Home Visit",
             category=category,
-            price=800.0, # 600 base + 200 travel
+            price=800.0, # As mentioned
             description="Home visit (includes ₹200 travel expense)"
         )
         
         db.add_all([video_service, home_service])
-        db.commit()
+
+    # 🚨 FINAL COMMIT: This ensures if the services fail, the provider isn't created either.
+    db.commit()
 
     return {"message": "Application submitted and approved. You can now log in."}
 

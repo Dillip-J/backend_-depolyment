@@ -21,8 +21,12 @@ class Booking(Base):
     
     scheduled_time = Column(DateTime)
     booking_status = Column(String(50), default='pending')
-    total_amount = Column(Numeric(10, 2)) # 🚨 ADDED to match SQL
+    total_amount = Column(Numeric(10, 2)) 
     
+    # 🚨 ADDED: Real Database Refund Tracking
+    refund_status = Column(String(50), nullable=True)
+    refund_time = Column(DateTime, nullable=True)
+
     # Address details
     delivery_address = Column(Text)
     flat_number = Column(String(50), nullable=False, server_default="Online")
@@ -36,7 +40,7 @@ class Booking(Base):
     
     # Medical Info
     symptoms = Column(Text)
-    clinical_notes = Column(Text) # 🚨 FIXED: Renamed from order_notes to match SQL
+    clinical_notes = Column(Text) 
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="bookings")
@@ -58,7 +62,6 @@ class VideoMeeting(Base):
     ended_at = Column(DateTime, nullable=True)
 
     booking = relationship("Booking", backref="video_meeting")
-
 
 # 🚨 COMMENTED OUT: MedicalRecord, Review, Complaint 
 # (These were dropped in Phase 1 of your SQL script and never rebuilt)

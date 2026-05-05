@@ -16,15 +16,6 @@ def mask_sensitive_data(value: str, visible_chars: int = 4):
     if len(value) <= visible_chars: return value
     return "*" * (len(value) - visible_chars) + value[-visible_chars:]
 
-class ScheduleUpdate(BaseModel):
-    day: str
-    slots: List[str]
-
-class BookingStatusUpdate(BaseModel):
-    status: str
-    notes: Optional[str] = None 
-    report_url: Optional[str] = None 
-
 @router.get("/dashboard/me") 
 def get_provider_dashboard(
     db: Session = Depends(get_db),
@@ -83,6 +74,13 @@ def get_provider_dashboard(
             "price": booking_price
         })
 
+    # 🚨 NEW: Calculate Exact Database Withdrawals
+    withdrawals = db.query(models.Withdrawal).filter(models.Withdrawal.provider_id == provider_id).all()
+    total_withdrawn = sum(float(w.amount) for w in withdrawals if w.status == 'completed')
+    pending_withdrawn = sum(float(w.amount) for w in withdrawals if w.status == 'pending')
+    
+    available_balance = lifetime_earnings - total_withdrawn - pending_withdrawn
+
     return {
         "provider_info": {
             "name": current_provider.name,
@@ -95,30 +93,58 @@ def get_provider_dashboard(
         "financials": {
             "lifetime_earnings": lifetime_earnings,
             "this_month_earnings": this_month_earnings,
-            "current_month_name": date.today().strftime("%B") 
+            "current_month_name": date.today().strftime("%B"),
+            "total_withdrawn": total_withdrawn,
+            "pending_withdrawal": pending_withdrawn,
+            "available_balance": available_balance
         },
         "items": formatted_bookings
     }
 
+# 🚨 NEW: API Endpoint to officially request a withdrawal
+@router.post("/withdraw")
+def request_withdrawal(db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
+    
+    # 1. Make sure bank details exist
+    if not current_provider.account_number or not current_provider.ifsc_code:
+        raise HTTPException(status_code=400, detail="Bank details are missing. Please update your profile first.")
+
+    # 2. Recalculate exact balance to prevent hacking
+    bookings = db.query(models.Booking).filter(models.Booking.provider_id == current_provider.provider_id, models.Booking.booking_status == 'completed').all()
+    lifetime_earnings = sum(float(b.total_amount or 500) for b in bookings)
+    
+    withdrawals = db.query(models.Withdrawal).filter(models.Withdrawal.provider_id == current_provider.provider_id).all()
+    total_withdrawn = sum(float(w.amount) for w in withdrawals if w.status == 'completed')
+    pending_withdrawn = sum(float(w.amount) for w in withdrawals if w.status == 'pending')
+    
+    available_balance = lifetime_earnings - total_withdrawn - pending_withdrawn
+    
+    if available_balance <= 0:
+        raise HTTPException(status_code=400, detail="Insufficient funds. You have no available balance to withdraw.")
+
+    # 3. Create the Transaction
+    new_withdrawal = models.Withdrawal(
+        provider_id=current_provider.provider_id,
+        amount=available_balance,
+        status='pending'
+    )
+    db.add(new_withdrawal)
+    db.commit()
+    
+    return {"message": f"Success! Withdrawal of ₹{available_balance} initiated.", "withdrawn_amount": available_balance}
+
 @router.get("/search-my-records") 
-def provider_record_search(
-    q: str, 
-    db: Session = Depends(get_db),
-    current_provider: models.ServiceProvider = Depends(get_current_provider) 
-):
+def provider_record_search(q: str, db: Session = Depends(get_db), current_provider: models.ServiceProvider = Depends(get_current_provider)):
     if len(q) < 2: return {"patients": [], "bookings": []}
     search_term = f"%{q}%"
-    
     patients = db.query(models.User).join(models.Booking).filter(
         models.Booking.provider_id == current_provider.provider_id,
         or_(models.User.name.ilike(search_term), models.User.phone.ilike(search_term))
     ).distinct().all()
-
     bookings = db.query(models.Booking).filter(
         models.Booking.provider_id == current_provider.provider_id,
         models.Booking.booking_id.cast(String).ilike(search_term)
     ).limit(10).all()
-
     return {"patients": patients, "bookings": bookings}
 
 @router.get("/all")
@@ -225,7 +251,6 @@ def delete_catalog_item(item_id: int, db: Session = Depends(get_db), current_pro
             return {"message": "Service deleted"}
     raise HTTPException(status_code=404, detail="Service not found.")
 
-# 🚨 THE MISSING ROUTE: This is required to fetch the phone number
 @router.get("/me")
 def get_provider_profile(current_provider: models.ServiceProvider = Depends(get_current_provider)):
     return current_provider

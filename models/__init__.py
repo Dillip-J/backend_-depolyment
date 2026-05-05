@@ -2,7 +2,7 @@
 from database import Base
 
 from .users import User, Admin
-from .providers import ServiceProvider, DoctorService, ProviderAvailability
+from .providers import ServiceProvider, DoctorService, ProviderAvailability, Withdrawal
 from .bookings import Booking, VideoMeeting
 
 # # models/__init__.py

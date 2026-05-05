@@ -1,6 +1,7 @@
 # models/providers.py
 import uuid
-from sqlalchemy import Column, String, BigInteger, Float, Text, ForeignKey, Integer
+from datetime import datetime
+from sqlalchemy import Column, String, BigInteger, Float, Text, ForeignKey, Integer, Numeric, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from database import Base
@@ -13,13 +14,13 @@ class ServiceProvider(Base):
     provider_type = Column(String(50), nullable=False, default='Doctor') 
     name = Column(String(255), nullable=False)
     category = Column(String(100), nullable=True) 
-    consultation_fee = Column(Float, default=500.0) # 🚨 CHANGED: Numeric to Float to match schema
+    consultation_fee = Column(Float, default=500.0)
     email = Column(String(255), unique=True, index=True, nullable=False)
     password = Column(String(255), nullable=False)
     phone = Column(String(20))
     address = Column(Text) 
-    latitude = Column(Float) # 🚨 CHANGED: Numeric to Float
-    longitude = Column(Float) # 🚨 CHANGED: Numeric to Float
+    latitude = Column(Float) 
+    longitude = Column(Float)
     status = Column(String(50), default='pending')
     profile_photo_url = Column(String(500))
     bio = Column(Text, nullable=True) 
@@ -30,6 +31,8 @@ class ServiceProvider(Base):
     doctor_services = relationship("DoctorService", back_populates="provider", cascade="all, delete")
     bookings = relationship("Booking", back_populates="provider", cascade="all, delete")
     availabilities = relationship("ProviderAvailability", back_populates="provider", cascade="all, delete")
+    # 🚨 ADDED: Relationship to the new Withdrawals table
+    withdrawals = relationship("Withdrawal", back_populates="provider", cascade="all, delete")
 
 
 class ProviderAvailability(Base):
@@ -53,10 +56,24 @@ class DoctorService(Base):
     service_name = Column(String(255), nullable=False)
     category = Column(String(100), nullable=False) 
     description = Column(Text)
-    price = Column(Float, nullable=False) # 🚨 CHANGED: Numeric to Float
+    price = Column(Float, nullable=False) 
     image_url = Column(String(500), nullable=True)
     status = Column(String(50), default='active')
     provider = relationship("ServiceProvider", back_populates="doctor_services")
+
+# 🚨 ADDED: The Real Database Withdrawal Tracker
+class Withdrawal(Base):
+    __tablename__ = "withdrawals"
+    __table_args__ = {'extend_existing': True}
+
+    withdrawal_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    provider_id = Column(UUID(as_uuid=True), ForeignKey("service_providers.provider_id", ondelete="CASCADE"), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    status = Column(String(50), default="pending") # pending, processing, completed
+    requested_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)
+
+    provider = relationship("ServiceProvider", back_populates="withdrawals")
 # # models/providers.py
 # import uuid
 # from sqlalchemy import Column, String, BigInteger, Numeric, Text, ForeignKey, Integer

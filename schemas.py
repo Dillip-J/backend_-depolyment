@@ -1,4 +1,3 @@
-# schemas.py
 from pydantic import BaseModel, EmailStr, ConfigDict, field_validator
 from typing import Optional, List
 from uuid import UUID
@@ -67,6 +66,16 @@ class ProviderProfileUpdate(BaseModel):
     consultation_fee: Optional[float] = None
 
 # ==========================================
+# 🚨 NEW: WITHDRAWAL SCHEMAS
+# ==========================================
+class WithdrawalResponse(ORMBase):
+    withdrawal_id: UUID
+    amount: float
+    status: str # pending, processing, completed
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+
+# ==========================================
 # DOCTOR DOMAIN ONLY
 # ==========================================
 class DoctorServiceCreate(BaseModel):
@@ -107,12 +116,16 @@ class BookingCreate(BaseModel):
     building_name: Optional[str] = "Online"
     flat_number: Optional[str] = "Online"
     landmark: Optional[str] = "Online"
-    total_amount: Optional[float] = None # 🚨 ADDED: So the backend accepts the price from the frontend!
+    total_amount: Optional[float] = None 
 
 class BookingResponse(ORMBase):
     booking_id: str
     booking_status: str
     scheduled_time: Optional[datetime]
+    total_amount: Optional[float]
+    # 🚨 ADDED: Refund tracking for the frontend
+    refund_status: Optional[str] = None 
+    refund_time: Optional[datetime] = None
 
 
 # ==========================================
@@ -139,6 +152,7 @@ class BookingStatusUpdate(BaseModel):
     status: str
     notes: Optional[str] = None
     report_url: Optional[str] = None
+
 # # schemas.py
 # from pydantic import BaseModel, EmailStr, ConfigDict, field_validator, model_validator
 # from typing import Optional, List
